@@ -24,6 +24,7 @@ pub struct ArchiveWorkerRequest {
     pub protocol_version: u32,
     pub run_id: String,
     pub operation: ArchiveWorkerOperation,
+    pub operation_token: String,
     pub state_dir: PathBuf,
     pub archive_dir: PathBuf,
     pub stage_binding: ArchiveStageBinding,
@@ -69,6 +70,7 @@ impl Drop for ArchiveWorkerRequest {
 #[serde(deny_unknown_fields)]
 pub struct ArchiveWorkerReport {
     pub protocol_version: u32,
+    pub operation_token: String,
     pub run_id: String,
     pub stage_id: String,
     pub native_snapshot_id: String,
@@ -580,7 +582,9 @@ mod linux {
             .get_archive_stage(&request.stage_binding.stage_id)
             .map_err(|_| WorkerProtocolError::STATE)?
             .ok_or(WorkerProtocolError::STATE)?;
-        if run.effect_state != "running"
+        if run.scope_protocol != 1
+            || run.operation_token.as_deref() != Some(request.operation_token.as_str())
+            || run.effect_state != "running"
             || run.active_operation.as_deref() != Some(request.operation.get_name())
             || run.binding.stage_id != stage.binding.stage_id
             || run.source_catalog_digest
@@ -605,6 +609,12 @@ mod linux {
         {
             return Err(WorkerProtocolError::STATE);
         }
+        crate::worker_runtime::verify_current_worker_identity(
+            run.worker_identity
+                .as_ref()
+                .ok_or(WorkerProtocolError::STATE)?,
+        )
+        .map_err(|_| WorkerProtocolError::ENVELOPE)?;
         let owner = acquire_owner(
             request,
             run.container_identity
@@ -831,7 +841,7 @@ mod linux {
         )
         .map_err(|_| WorkerProtocolError::RESOURCE)?;
         let expected = ManifestArtifact {
-            digest: run.manifest_digest,
+            digest: run.manifest_digest.clone(),
             entry_count: count,
         };
         let report = verify_snapshot(
@@ -861,9 +871,18 @@ mod linux {
         let repository_bytes =
             sync_repository(&repo_endpoint, request.repository_max_bytes, &guard)?;
         owner.check()?;
+        if state
+            .get_native_run(&request.run_id)
+            .map_err(|_| WorkerProtocolError::STATE)?
+            .as_ref()
+            != Some(&run)
+        {
+            return Err(WorkerProtocolError::STATE);
+        }
         guard.check().map_err(|_| WorkerProtocolError::RESOURCE)?;
         Ok(ArchiveWorkerReport {
             protocol_version: 1,
+            operation_token: request.operation_token.clone(),
             run_id: request.run_id.clone(),
             stage_id: stage.binding.stage_id,
             native_snapshot_id: snapshot.id.to_hex().to_string(),

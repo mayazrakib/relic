@@ -474,3 +474,178 @@ fn retains_fence_and_budget_until_unreaped_worker_is_proved_stopped() {
         "unknown"
     );
 }
+
+#[test]
+fn legacy_unrecorded_running_and_unknown_runs_require_reconciliation() {
+    for initial in ["running", "unknown"] {
+        let directory = get_private_directory();
+        let root = fs::canonicalize(directory.path()).unwrap();
+        let native = root.join("native");
+        fs::create_dir(&native).unwrap();
+        fs::set_permissions(&native, fs::Permissions::from_mode(0o700)).unwrap();
+        let state_path = root.join("state");
+        let mut state = StateStore::open(&state_path).unwrap();
+        create_sealed_stage(&mut state);
+        let store = create_store(&native);
+        store
+            .prepare(
+                &mut state,
+                &get_binding(&store, "run_1"),
+                &StageGuard::default(),
+            )
+            .unwrap();
+        state.start_native_run("run_1", "create").unwrap();
+        if initial == "unknown" {
+            state.mark_native_unknown("run_1").unwrap();
+        }
+        let db = rusqlite::Connection::open(state_path.join("state.sqlite3")).unwrap();
+        db.execute("UPDATE native_runs SET scope_protocol=0,operation_token=NULL,worker_identity=NULL WHERE run_id='run_1'", []).unwrap();
+        drop(db);
+        let guard = StageGuard::default();
+        let pool = ResourcePool::new(ResourceClass::BALANCED, 8);
+        let job = pool.admit_job("job", &guard).unwrap();
+        let key = Zeroizing::new([7u8; 32]);
+        let execution = NativeRunExecution {
+            executable: Path::new("/nonexistent-worker"),
+            state_dir: &state_path,
+            archive_dir: &root,
+            source_key_ref: "key",
+            source_key: &key,
+            repository_key_ref: "repository_key",
+            repository_password: "test-only-password",
+            source_limits: ArchiveDiskLimits {
+                max_entries: 10,
+                max_file_bytes: 1024,
+                max_ciphertext_bytes: 4096,
+                max_catalog_bytes: 4096,
+            },
+            worker_limits: WorkerLimits {
+                memory_max_bytes: 32 * 1024 * 1024,
+                memory_high_bytes: 24 * 1024 * 1024,
+                max_tasks: 16,
+                max_open_files: 32,
+                max_runtime: Duration::from_secs(5),
+                max_output_bytes: 4096,
+            },
+            job: &job,
+            guard: &guard,
+        };
+        assert!(matches!(
+            store.reconcile(&mut state, "run_1", &execution),
+            Err(NativeRunError::RECONCILIATION_REQUIRED)
+        ));
+        let record = state.get_native_run("run_1").unwrap().unwrap();
+        assert_eq!(record.effect_state, initial);
+        assert_eq!(record.scope_protocol, 0);
+        assert_eq!(record.creation_attempts, 1);
+        assert_eq!(record.verification_attempts, 0);
+    }
+}
+
+#[test]
+#[ignore = "requires verified delegated Linux cgroup development guard with Landlock"]
+fn reconciliation_quiesces_recorded_orphan_before_owner_probe() {
+    use relic::worker_runtime::execute_worker_recorded;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    let directory = get_private_directory();
+    let root = fs::canonicalize(directory.path()).unwrap();
+    let native = root.join("native");
+    fs::create_dir(&native).unwrap();
+    fs::set_permissions(&native, fs::Permissions::from_mode(0o700)).unwrap();
+    let state_path = root.join("state");
+    let mut state = StateStore::open(&state_path).unwrap();
+    create_sealed_stage(&mut state);
+    let store = create_store(&native);
+    let guard = StageGuard::default();
+    store
+        .prepare(&mut state, &get_binding(&store, "run_1"), &guard)
+        .unwrap();
+    let started = state.start_native_run("run_1", "create").unwrap();
+    assert_eq!(started.operation_token.as_deref(), Some("create:1"));
+    let container = native.join("native_run_1");
+    let markers = root.join("markers");
+    fs::create_dir(&markers).unwrap();
+    fs::set_permissions(&markers, fs::Permissions::from_mode(0o700)).unwrap();
+    let marker = markers.join("locked");
+    let script = root.join("orphan.py");
+    fs::write(&script, format!("#!/usr/bin/python3\nimport fcntl,time\nf=open({:?},'r')\nfcntl.flock(f,fcntl.LOCK_EX)\nopen({:?},'w').write('locked')\ntime.sleep(30)\n", container.join("owner.lock").to_str().unwrap(), marker.to_str().unwrap())).unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+    let (bound_tx, bound_rx) = mpsc::channel();
+    let worker_state = state_path.clone();
+    let worker_container = container.clone();
+    let worker_markers = markers.clone();
+    let worker = std::thread::spawn(move || {
+        let limits = WorkerLimits {
+            memory_max_bytes: 32 * 1024 * 1024,
+            memory_high_bytes: 24 * 1024 * 1024,
+            max_tasks: 16,
+            max_open_files: 32,
+            max_runtime: Duration::from_secs(30),
+            max_output_bytes: 4096,
+        };
+        execute_worker_recorded(
+            &script,
+            b"",
+            &[],
+            &[worker_container, worker_markers],
+            limits,
+            &StageGuard::default(),
+            |identity| {
+                let mut callback_state = StateStore::open(&worker_state).unwrap();
+                callback_state
+                    .bind_native_run_worker("run_1", "create", "create:1", identity)
+                    .unwrap();
+                bound_tx.send(identity.clone()).unwrap();
+                Ok(())
+            },
+        )
+    });
+    let identity = bound_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !marker.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(marker.exists());
+    let pool = ResourcePool::new(ResourceClass::BALANCED, 8);
+    let job = pool.admit_job("job", &guard).unwrap();
+    let key = Zeroizing::new([7u8; 32]);
+    let execution = NativeRunExecution {
+        executable: Path::new(env!("CARGO_BIN_EXE_relic-worker")),
+        state_dir: &state_path,
+        archive_dir: &root,
+        source_key_ref: "key",
+        source_key: &key,
+        repository_key_ref: "repository_key",
+        repository_password: "test-only-password",
+        source_limits: ArchiveDiskLimits {
+            max_entries: 10,
+            max_file_bytes: 1024,
+            max_ciphertext_bytes: 4096,
+            max_catalog_bytes: 4096,
+        },
+        worker_limits: WorkerLimits {
+            memory_max_bytes: 192 * 1024 * 1024,
+            memory_high_bytes: 144 * 1024 * 1024,
+            max_tasks: 16,
+            max_open_files: 64,
+            max_runtime: Duration::from_secs(60),
+            max_output_bytes: 16388,
+        },
+        job: &job,
+        guard: &guard,
+    };
+    let result = store.reconcile(&mut state, "run_1", &execution);
+    assert!(matches!(result, Err(NativeRunError::OUTCOME_UNKNOWN)));
+    let scope = Path::new("/sys/fs/cgroup").join(identity.group_path.trim_start_matches('/'));
+    assert!(!scope.exists());
+    assert!(worker.join().unwrap().is_err());
+    let record = state.get_native_run("run_1").unwrap().unwrap();
+    assert_eq!(record.effect_state, "unknown");
+    assert_eq!(record.creation_attempts, 1);
+    assert_eq!(record.verification_attempts, 1);
+    assert_eq!(record.verification_failures, 1);
+    let owner = fs::File::open(container.join("owner.lock")).unwrap();
+    owner.try_lock().unwrap();
+}

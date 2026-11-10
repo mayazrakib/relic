@@ -14,6 +14,7 @@ fn get_request() -> ArchiveWorkerRequest {
         protocol_version: 1,
         run_id: "run_1".into(),
         operation: ArchiveWorkerOperation::CREATE,
+        operation_token: "create:1".into(),
         scratch_dir: "/scratch".into(),
         scratch_identity: WorkerDirectoryIdentity {
             device: 1,
@@ -65,6 +66,18 @@ fn reads_exact_bounded_request_and_rejects_trailing_or_unknown_data() {
     let parsed = read_request(Cursor::new(frame(&bytes))).unwrap();
     assert_eq!(parsed.stage_binding.stage_id, "stage_1");
     assert_eq!(parsed.archive_key, [7; 32]);
+    assert_eq!(parsed.operation_token, "create:1");
+    let mut missing_token: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    missing_token
+        .as_object_mut()
+        .unwrap()
+        .remove("operation_token");
+    assert!(
+        read_request(Cursor::new(frame(
+            &serde_json::to_vec(&missing_token).unwrap()
+        )))
+        .is_err()
+    );
     let mut trailing = frame(&bytes);
     trailing.push(b'x');
     assert!(read_request(Cursor::new(trailing)).is_err());
@@ -83,6 +96,7 @@ fn reads_exact_bounded_request_and_rejects_trailing_or_unknown_data() {
 fn writes_length_framed_bounded_report() {
     let report = ArchiveWorkerReport {
         protocol_version: 1,
+        operation_token: "create:1".into(),
         run_id: "run_1".into(),
         repository_bytes: 1024,
         stage_id: "stage_1".into(),
@@ -98,6 +112,7 @@ fn writes_length_framed_bounded_report() {
     assert_eq!(length, bytes.len() - 4);
     let decoded: ArchiveWorkerReport = serde_json::from_slice(&bytes[4..]).unwrap();
     assert_eq!(decoded.entry_count, 2);
+    assert_eq!(decoded.operation_token, "create:1");
     let oversized = ArchiveWorkerReport {
         stage_id: "x".repeat(17_000),
         ..report

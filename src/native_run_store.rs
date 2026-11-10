@@ -17,7 +17,9 @@ use crate::archive_worker::{
 use crate::local_endpoint::LocalEndpoint;
 use crate::resources::{ActiveJob, Demand, StageGuard, StageReservation};
 use crate::state::{NativeRunBinding, NativeRunRecord, StateStore};
-use crate::worker_runtime::{PendingWorker, WorkerError, WorkerLimits, execute_worker};
+use crate::worker_runtime::{
+    PendingWorker, WorkerError, WorkerLimits, execute_worker_recorded, quiesce_recorded_worker,
+};
 
 const RESERVE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_REPOSITORY_BYTES: u64 = 512 * 1024 * 1024;
@@ -339,6 +341,25 @@ impl NativeRunStore {
             .revalidate()
             .map_err(|_| NativeRunError::STORAGE)?;
         check_private(self.endpoint.directory(), true)?;
+        let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
+        // SAFETY: the directory is pinned and statfs output storage is writable.
+        if unsafe {
+            libc::fstatfs(
+                self.endpoint.directory().as_raw_fd(),
+                filesystem.as_mut_ptr(),
+            )
+        } != 0
+        {
+            return Err(NativeRunError::STORAGE);
+        }
+        // SAFETY: successful fstatfs initialized the output.
+        if !matches!(
+            unsafe { filesystem.assume_init() }.f_type,
+            0xef53 | 0x9123683e | 0x58465342
+        ) {
+            // A local process stop cannot drain outstanding remote filesystem operations.
+            return Err(NativeRunError::STORAGE);
+        }
         let metadata = fs::symlink_metadata(&self.root).map_err(|_| NativeRunError::STORAGE)?;
         if !metadata.is_dir()
             || metadata.file_type().is_symlink()
@@ -481,6 +502,11 @@ impl NativeRunStore {
         self.validate_record(&record)?;
         self.reserve_quota(state, &record)?;
         let lock = self.acquire_parent_lock(&record)?;
+        let record = state
+            .get_native_run(&binding.run_id)
+            .map_err(|_| NativeRunError::STATE)?
+            .ok_or(NativeRunError::STATE)?;
+        self.validate_record(&record)?;
         if record.effect_state != "prepared" {
             self.open_layout(&record)?;
             return Ok(record);
@@ -557,6 +583,11 @@ impl NativeRunStore {
             .map_err(|_| NativeRunError::STATE)?
             .ok_or(NativeRunError::STATE)?;
         let lock = self.acquire_parent_lock(&record)?;
+        let record = state
+            .get_native_run(run_id)
+            .map_err(|_| NativeRunError::STATE)?
+            .ok_or(NativeRunError::STATE)?;
+        self.validate_record(&record)?;
         if record.effect_state != "ready" {
             return Err(NativeRunError::RECONCILIATION_REQUIRED);
         }
@@ -592,6 +623,11 @@ impl NativeRunStore {
             .ok_or(NativeRunError::STATE)?;
         self.reserve_quota(state, &record)?;
         let lock = self.acquire_parent_lock(&record)?;
+        record = state
+            .get_native_run(run_id)
+            .map_err(|_| NativeRunError::STATE)?
+            .ok_or(NativeRunError::STATE)?;
+        self.validate_record(&record)?;
         if record.effect_state == "staging" {
             let container = open_directory(
                 self.endpoint.directory(),
@@ -608,13 +644,32 @@ impl NativeRunStore {
         ) {
             return Err(NativeRunError::RECONCILIATION_REQUIRED);
         }
-        let layout = self.open_layout(&record)?;
-        acquire_file_lock(&layout.owner)?;
+        if matches!(record.effect_state.as_str(), "running" | "unknown")
+            && (record.scope_protocol != 1 || record.operation_token.is_none())
+        {
+            return Err(NativeRunError::RECONCILIATION_REQUIRED);
+        }
         if record.effect_state == "running" {
+            let operation = record
+                .active_operation
+                .as_deref()
+                .ok_or(NativeRunError::STATE)?;
+            let token = record
+                .operation_token
+                .as_deref()
+                .ok_or(NativeRunError::STATE)?;
             record = state
-                .mark_native_unknown(run_id)
+                .mark_native_unknown_for_operation(run_id, operation, token)
                 .map_err(|_| NativeRunError::STATE)?;
         }
+        if let Some(identity) = &record.worker_identity
+            && !quiesce_recorded_worker(identity, execution.guard)
+                .map_err(|_| NativeRunError::RECONCILIATION_REQUIRED)?
+        {
+            return Err(NativeRunError::BUSY);
+        }
+        let layout = self.open_layout(&record)?;
+        acquire_file_lock(&layout.owner)?;
         drop(layout);
         self.run_worker(
             state,
@@ -638,11 +693,24 @@ impl NativeRunStore {
             .check()
             .map_err(|_| NativeRunError::RESOURCE)?;
         self.check_parent_lock(record, lock)?;
+        let database = state.connection.path().ok_or(NativeRunError::STATE)?;
+        let database = fs::canonicalize(database).map_err(|_| NativeRunError::STATE)?;
+        let state_path =
+            fs::canonicalize(execution.state_dir).map_err(|_| NativeRunError::STORAGE)?;
+        if database.parent() != Some(state_path.as_path()) {
+            return Err(NativeRunError::STATE);
+        }
         if execution.repository_key_ref != record.binding.repository_key_ref
             || (operation == ArchiveWorkerOperation::CREATE
                 && execution.source_key_ref != record.source_key_ref)
         {
             return Err(NativeRunError::WRONG_KEY_REFERENCE);
+        }
+        if execution.repository_password.is_empty()
+            || execution.repository_password.len() > 4096
+            || !execution.executable.is_file()
+        {
+            return Err(NativeRunError::INVALID);
         }
         let capture = state
             .get_capture(&record.capture_id)
@@ -698,72 +766,90 @@ impl NativeRunStore {
         let container_path = self.root.join(&record.binding.relative_name);
         let repository_dir = container_path.join("repository");
         let scratch_dir = container_path.join("scratch");
-        let request = ArchiveWorkerRequest {
-            protocol_version: 1,
-            run_id: record.binding.run_id.clone(),
-            operation,
-            state_dir: execution.state_dir.to_path_buf(),
-            archive_dir: execution.archive_dir.to_path_buf(),
-            stage_binding: stage.binding,
-            archive_key: if operation == ArchiveWorkerOperation::CREATE {
-                **execution.source_key
-            } else {
-                [0; 32]
-            },
-            source_limits: execution.source_limits,
-            repository_dir: repository_dir.clone(),
-            repository_identity: get_worker_identity(
-                record
-                    .repository_identity
-                    .as_deref()
-                    .ok_or(NativeRunError::STATE)?,
-            )?,
-            scratch_dir: scratch_dir.clone(),
-            scratch_identity: get_worker_identity(
-                record
-                    .scratch_identity
-                    .as_deref()
-                    .ok_or(NativeRunError::STATE)?,
-            )?,
-            owner_lock: container_path.join("owner.lock"),
-            owner_lock_identity: get_worker_identity(
-                record
-                    .owner_lock_identity
-                    .as_deref()
-                    .ok_or(NativeRunError::STATE)?,
-            )?,
-            repository_password: execution.repository_password.to_owned(),
-            repository_max_bytes,
-            memory_max_bytes: execution.worker_limits.memory_max_bytes,
-            timeout_seconds: execution.worker_limits.max_runtime.as_secs().clamp(1, 900),
-        };
-        let body =
-            Zeroizing::new(serde_json::to_vec(&request).map_err(|_| NativeRunError::INVALID)?);
-        if body.len() > 65536 {
-            return Err(NativeRunError::INVALID);
-        }
-        let mut input = Zeroizing::new((body.len() as u32).to_be_bytes().to_vec());
-        input.extend_from_slice(&body);
-        let mut read_paths = vec![execution.state_dir.to_path_buf(), container_path];
-        let mut write_paths = vec![scratch_dir];
-        if operation == ArchiveWorkerOperation::CREATE {
-            read_paths.push(execution.archive_dir.to_path_buf());
-            write_paths.push(repository_dir);
-        }
         self.check_parent_lock(record, lock)?;
         drop(layout);
         let mut pending_lock = Some(lock.try_clone().map_err(|_| NativeRunError::STORAGE)?);
-        state
+        let started = state
             .start_native_run(&record.binding.run_id, operation.get_name())
             .map_err(|_| NativeRunError::STATE)?;
+        let record = &started;
+        let token = record
+            .operation_token
+            .as_deref()
+            .ok_or(NativeRunError::STATE)?;
         let outcome = (|| {
-            let output = execute_worker(
+            let request = ArchiveWorkerRequest {
+                protocol_version: 1,
+                run_id: record.binding.run_id.clone(),
+                operation_token: token.to_owned(),
+                operation,
+                state_dir: execution.state_dir.to_path_buf(),
+                archive_dir: execution.archive_dir.to_path_buf(),
+                stage_binding: stage.binding,
+                archive_key: if operation == ArchiveWorkerOperation::CREATE {
+                    **execution.source_key
+                } else {
+                    [0; 32]
+                },
+                source_limits: execution.source_limits,
+                repository_dir: repository_dir.clone(),
+                repository_identity: get_worker_identity(
+                    record
+                        .repository_identity
+                        .as_deref()
+                        .ok_or(NativeRunError::STATE)?,
+                )?,
+                scratch_dir: scratch_dir.clone(),
+                scratch_identity: get_worker_identity(
+                    record
+                        .scratch_identity
+                        .as_deref()
+                        .ok_or(NativeRunError::STATE)?,
+                )?,
+                owner_lock: container_path.join("owner.lock"),
+                owner_lock_identity: get_worker_identity(
+                    record
+                        .owner_lock_identity
+                        .as_deref()
+                        .ok_or(NativeRunError::STATE)?,
+                )?,
+                repository_password: execution.repository_password.to_owned(),
+                repository_max_bytes,
+                memory_max_bytes: execution.worker_limits.memory_max_bytes,
+                timeout_seconds: execution.worker_limits.max_runtime.as_secs().clamp(1, 900),
+            };
+            let body =
+                Zeroizing::new(serde_json::to_vec(&request).map_err(|_| NativeRunError::INVALID)?);
+            if body.len() > 65536 {
+                return Err(NativeRunError::INVALID);
+            }
+            let mut input = Zeroizing::new((body.len() as u32).to_be_bytes().to_vec());
+            input.extend_from_slice(&body);
+            let mut read_paths = vec![execution.state_dir.to_path_buf(), container_path];
+            let mut write_paths = vec![scratch_dir];
+            if operation == ArchiveWorkerOperation::CREATE {
+                read_paths.push(execution.archive_dir.to_path_buf());
+                write_paths.push(repository_dir);
+            }
+            self.check_parent_lock(record, lock)?;
+            let output = execute_worker_recorded(
                 execution.executable,
                 &input,
                 &read_paths,
                 &write_paths,
                 execution.worker_limits,
                 execution.guard,
+                |identity| {
+                    state
+                        .bind_native_run_worker(
+                            &record.binding.run_id,
+                            operation.get_name(),
+                            token,
+                            identity,
+                        )
+                        .map_err(|_| WorkerError::INVALID)?;
+                    Ok(())
+                },
             )
             .map_err(|error| {
                 if let WorkerError::OUTCOME_UNKNOWN(mut stop) = error
@@ -800,6 +886,7 @@ impl NativeRunStore {
                 .map_err(|_| NativeRunError::OUTCOME_UNKNOWN)?;
             if report.protocol_version != 1
                 || report.run_id != record.binding.run_id
+                || report.operation_token != token
                 || report.stage_id != record.binding.stage_id
                 || report.manifest_digest != record.manifest_digest
                 || report.entry_count.to_string() != record.manifest_entry_count
@@ -817,8 +904,10 @@ impl NativeRunStore {
                 .check()
                 .map_err(|_| NativeRunError::RESOURCE)?;
             state
-                .seal_native_run(
+                .seal_native_run_for_operation(
                     &record.binding.run_id,
+                    operation.get_name(),
+                    token,
                     &report.native_snapshot_id,
                     &report.manifest_digest,
                     report.entry_count,
@@ -829,7 +918,11 @@ impl NativeRunStore {
         })();
         if outcome.is_err() {
             state
-                .mark_native_unknown(&record.binding.run_id)
+                .mark_native_unknown_for_operation(
+                    &record.binding.run_id,
+                    operation.get_name(),
+                    token,
+                )
                 .map_err(|_| NativeRunError::OUTCOME_UNKNOWN)?;
         }
         outcome

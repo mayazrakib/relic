@@ -14,7 +14,7 @@ use crate::staging_quota::{
 };
 
 const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
-const CURRENT_SCHEMA_VERSION: u32 = 11;
+const CURRENT_SCHEMA_VERSION: u32 = 12;
 
 #[derive(Debug)]
 pub enum StateError {
@@ -276,6 +276,9 @@ pub struct NativeRunRecord {
     pub creation_attempts: u32,
     pub verification_attempts: u64,
     pub verification_failures: u32,
+    pub scope_protocol: u32,
+    pub operation_token: Option<String>,
+    pub worker_identity: Option<crate::worker_identity::WorkerIdentity>,
 }
 
 type RestoreSnapshot = (String, String, String, String, String);
@@ -587,6 +590,12 @@ impl StateStore {
         if version <= 10 {
             transaction.execute_batch(include_str!(
                 "../database/migrations/00011_gateway_budgets.sql"
+            ))?;
+        }
+
+        if version <= 11 {
+            transaction.execute_batch(include_str!(
+                "../database/migrations/00012_native_worker_scopes.sql"
             ))?;
         }
 
@@ -1875,7 +1884,7 @@ impl StateStore {
             if prior.effect_state != "ready" || prior.creation_attempts != 0 {
                 return Err(StateError::EffectConflict);
             }
-            transaction.execute("UPDATE native_runs SET effect_state = 'running', active_operation = 'create', creation_attempts = 1 WHERE run_id = ?1", [run_id])?;
+            transaction.execute("UPDATE native_runs SET effect_state = 'running', active_operation = 'create', creation_attempts = 1, scope_protocol = 1, operation_token = 'create:1', worker_identity = NULL WHERE run_id = ?1", [run_id])?;
         } else {
             if !matches!(prior.effect_state.as_str(), "unknown" | "verified")
                 || prior.verification_failures >= 3
@@ -1886,14 +1895,67 @@ impl StateStore {
                 .verification_attempts
                 .checked_add(1)
                 .ok_or(StateError::InvalidInput)?;
-            transaction.execute("UPDATE native_runs SET effect_state = 'running', active_operation = 'verify', verification_attempts = ?1 WHERE run_id = ?2", params![attempts.to_string(), run_id])?;
+            transaction.execute("UPDATE native_runs SET effect_state = 'running', active_operation = 'verify', verification_attempts = ?1, scope_protocol = 1, operation_token = ?2, worker_identity = NULL WHERE run_id = ?3", params![attempts.to_string(), format!("verify:{attempts}"), run_id])?;
         }
         transaction.commit()?;
         self.get_native_run(run_id)?
             .ok_or(StateError::EffectConflict)
     }
 
+    /// Bind the current worker scope before forking; a stale operation cannot bind.
+    pub fn bind_native_run_worker(
+        &mut self,
+        run_id: &str,
+        operation: &str,
+        token: &str,
+        identity: &crate::worker_identity::WorkerIdentity,
+    ) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(run_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let encoded = serde_json::to_string(identity)?;
+        if encoded.len() > 16384 {
+            return Err(StateError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior = read_native_run(&tx, run_id)?.ok_or(StateError::EffectConflict)?;
+        check_native_operation(&prior, Some((operation, token)))?;
+        if prior.effect_state != "running" {
+            return Err(StateError::EffectConflict);
+        }
+        if let Some(previous) = &prior.worker_identity {
+            if previous != identity {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else {
+            tx.execute(
+                "UPDATE native_runs SET worker_identity=?1 WHERE run_id=?2",
+                params![encoded, run_id],
+            )?;
+        }
+        let result = read_native_run(&tx, run_id)?.ok_or(StateError::EffectConflict)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
     pub fn mark_native_unknown(&mut self, run_id: &str) -> Result<NativeRunRecord, StateError> {
+        self.mark_native_unknown_checked(run_id, None)
+    }
+    pub fn mark_native_unknown_for_operation(
+        &mut self,
+        run_id: &str,
+        operation: &str,
+        token: &str,
+    ) -> Result<NativeRunRecord, StateError> {
+        self.mark_native_unknown_checked(run_id, Some((operation, token)))
+    }
+    fn mark_native_unknown_checked(
+        &mut self,
+        run_id: &str,
+        scope: Option<(&str, &str)>,
+    ) -> Result<NativeRunRecord, StateError> {
         if !valid_archive_id(run_id) {
             return Err(StateError::InvalidInput);
         }
@@ -1901,6 +1963,7 @@ impl StateStore {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let prior = read_native_run(&transaction, run_id)?.ok_or(StateError::EffectConflict)?;
+        check_native_operation(&prior, scope)?;
         match prior.effect_state.as_str() {
             "running" => {
                 let failures = if prior.active_operation.as_deref() == Some("verify") {
@@ -1933,6 +1996,41 @@ impl StateStore {
         files: u64,
         bytes: u64,
     ) -> Result<NativeRunRecord, StateError> {
+        self.seal_native_run_checked(run_id, None, snapshot_id, digest, entries, files, bytes)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn seal_native_run_for_operation(
+        &mut self,
+        run_id: &str,
+        operation: &str,
+        token: &str,
+        snapshot_id: &str,
+        digest: &str,
+        entries: u64,
+        files: u64,
+        bytes: u64,
+    ) -> Result<NativeRunRecord, StateError> {
+        self.seal_native_run_checked(
+            run_id,
+            Some((operation, token)),
+            snapshot_id,
+            digest,
+            entries,
+            files,
+            bytes,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn seal_native_run_checked(
+        &mut self,
+        run_id: &str,
+        scope: Option<(&str, &str)>,
+        snapshot_id: &str,
+        digest: &str,
+        entries: u64,
+        files: u64,
+        bytes: u64,
+    ) -> Result<NativeRunRecord, StateError> {
         if !valid_archive_id(run_id)
             || snapshot_id.len() != 64
             || !snapshot_id
@@ -1946,6 +2044,7 @@ impl StateStore {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let prior = read_native_run(&transaction, run_id)?.ok_or(StateError::EffectConflict)?;
+        check_native_operation(&prior, scope)?;
         if prior.manifest_digest != digest
             || prior.manifest_entry_count != entries.to_string()
             || prior.file_count != files.to_string()
@@ -2617,20 +2716,45 @@ fn validate_readonly_state_file(path: &Path) -> Result<fs::Metadata, StateError>
     Ok(metadata)
 }
 
+fn check_native_operation(
+    record: &NativeRunRecord,
+    scope: Option<(&str, &str)>,
+) -> Result<(), StateError> {
+    if let Some((operation, token)) = scope {
+        let expected = match operation {
+            "create" => "create:1".to_owned(),
+            "verify" if record.verification_attempts > 0 => {
+                format!("verify:{}", record.verification_attempts)
+            }
+            _ => return Err(StateError::EffectConflict),
+        };
+        if record.scope_protocol != 1
+            || token != expected
+            || record.operation_token.as_deref() != Some(token)
+            || (record.effect_state == "running"
+                && record.active_operation.as_deref() != Some(operation))
+        {
+            return Err(StateError::EffectConflict);
+        }
+    }
+    Ok(())
+}
+
 fn read_native_run(
     connection: &Connection,
     run_id: &str,
 ) -> Result<Option<NativeRunRecord>, StateError> {
-    let record: Option<(NativeRunRecord, String)> = connection.query_row(
-        "SELECT run_id, stage_id, storage_endpoint_id, storage_identity, relative_name, repository_key_ref, capture_id, manifest_digest, manifest_entry_count, file_count, payload_bytes, source_catalog_digest, source_key_ref, effect_state, container_identity, repository_identity, owner_lock_identity, scratch_identity, native_snapshot_id, active_operation, creation_attempts, verification_attempts, verification_failures FROM native_runs WHERE run_id = ?1",
+    let record: Option<(NativeRunRecord, String, Option<String>)> = connection.query_row(
+        "SELECT run_id, stage_id, storage_endpoint_id, storage_identity, relative_name, repository_key_ref, capture_id, manifest_digest, manifest_entry_count, file_count, payload_bytes, source_catalog_digest, source_key_ref, effect_state, container_identity, repository_identity, owner_lock_identity, scratch_identity, native_snapshot_id, active_operation, creation_attempts, verification_attempts, verification_failures, scope_protocol, operation_token, worker_identity FROM native_runs WHERE run_id = ?1",
         [run_id], |row| Ok((NativeRunRecord {
             binding: NativeRunBinding { run_id: row.get(0)?, stage_id: row.get(1)?, storage_endpoint_id: row.get(2)?, storage_identity: row.get(3)?, relative_name: row.get(4)?, repository_key_ref: row.get(5)? },
-            capture_id: row.get(6)?, manifest_digest: row.get(7)?, manifest_entry_count: row.get(8)?, file_count: row.get(9)?, payload_bytes: row.get(10)?, source_catalog_digest: row.get(11)?, source_key_ref: row.get(12)?, effect_state: row.get(13)?, container_identity: row.get(14)?, repository_identity: row.get(15)?, owner_lock_identity: row.get(16)?, scratch_identity: row.get(17)?, native_snapshot_id: row.get(18)?, active_operation: row.get(19)?, creation_attempts: row.get(20)?, verification_attempts: 0, verification_failures: row.get(22)?,
-        }, row.get(21)?)),
+            capture_id: row.get(6)?, manifest_digest: row.get(7)?, manifest_entry_count: row.get(8)?, file_count: row.get(9)?, payload_bytes: row.get(10)?, source_catalog_digest: row.get(11)?, source_key_ref: row.get(12)?, effect_state: row.get(13)?, container_identity: row.get(14)?, repository_identity: row.get(15)?, owner_lock_identity: row.get(16)?, scratch_identity: row.get(17)?, native_snapshot_id: row.get(18)?, active_operation: row.get(19)?, creation_attempts: row.get(20)?, verification_attempts: 0, verification_failures: row.get(22)?, scope_protocol: row.get(23)?, operation_token: row.get(24)?, worker_identity: None,
+        }, row.get(21)?, row.get(25)?)),
     ).optional()?;
     record
-        .map(|(mut value, attempts)| {
+        .map(|(mut value, attempts, identity)| {
             value.verification_attempts = parse_archive_counter(&attempts)?;
+            value.worker_identity = identity.as_deref().map(serde_json::from_str).transpose()?;
             Ok(value)
         })
         .transpose()

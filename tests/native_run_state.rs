@@ -272,3 +272,158 @@ fn paginates_pending_and_migrates_schema_six() {
     assert!(store.get_native_run("run_b").unwrap().is_none());
     assert!(store.get_archive_stage("stage_1").unwrap().is_some());
 }
+
+fn get_worker_identity(inode: u64) -> relic::worker_identity::WorkerIdentity {
+    relic::worker_identity::WorkerIdentity {
+        host_id: format!("sha256:{}", "a".repeat(64)),
+        boot_id: "01234567-89ab-cdef-0123-456789abcdef".into(),
+        cgroup_namespace_inode: 10,
+        group_path: format!("/scope/worker_{}", "a".repeat(32)),
+        group_inode: inode,
+        parent_path: "/scope".into(),
+        parent_inode: 11,
+    }
+}
+
+#[test]
+fn native_operation_scope_revokes_old_callbacks_and_survives_reopen() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("state");
+    let mut store = StateStore::open(&path).unwrap();
+    create_sealed_stage(&mut store);
+    make_ready(&mut store, "run_1");
+    let first = store.start_native_run("run_1", "create").unwrap();
+    assert_eq!(first.scope_protocol, 1);
+    assert_eq!(first.operation_token.as_deref(), Some("create:1"));
+    let identity = get_worker_identity(12);
+    let bound = store
+        .bind_native_run_worker("run_1", "create", "create:1", &identity)
+        .unwrap();
+    assert_eq!(bound.worker_identity.as_ref(), Some(&identity));
+    assert_eq!(
+        store
+            .bind_native_run_worker("run_1", "create", "create:1", &identity)
+            .unwrap(),
+        bound
+    );
+    assert!(matches!(
+        store.bind_native_run_worker("run_1", "create", "create:1", &get_worker_identity(13)),
+        Err(StateError::IdempotencyConflict)
+    ));
+    store
+        .mark_native_unknown_for_operation("run_1", "create", "create:1")
+        .unwrap();
+    assert!(
+        store
+            .bind_native_run_worker("run_1", "create", "create:1", &identity)
+            .is_err()
+    );
+    drop(store);
+    let mut store = StateStore::open(&path).unwrap();
+    assert_eq!(
+        store
+            .get_native_run("run_1")
+            .unwrap()
+            .unwrap()
+            .worker_identity
+            .as_ref(),
+        Some(&identity)
+    );
+    // The trusted controller must first quiesce the retained CREATE scope.
+    let verify = store.start_native_run("run_1", "verify").unwrap();
+    assert_eq!(verify.operation_token.as_deref(), Some("verify:1"));
+    assert!(verify.worker_identity.is_none());
+    assert!(
+        store
+            .bind_native_run_worker("run_1", "create", "create:1", &identity)
+            .is_err()
+    );
+    assert!(
+        store
+            .mark_native_unknown_for_operation("run_1", "create", "create:1")
+            .is_err()
+    );
+    store
+        .bind_native_run_worker("run_1", "verify", "verify:1", &get_worker_identity(14))
+        .unwrap();
+    store
+        .mark_native_unknown_for_operation("run_1", "verify", "verify:1")
+        .unwrap();
+    let verify = store.start_native_run("run_1", "verify").unwrap();
+    assert_eq!(verify.operation_token.as_deref(), Some("verify:2"));
+    assert!(
+        store
+            .bind_native_run_worker("run_1", "verify", "verify:1", &identity)
+            .is_err()
+    );
+    assert!(
+        store
+            .seal_native_run_for_operation(
+                "run_1",
+                "verify",
+                "verify:1",
+                &"a".repeat(64),
+                &get_digest('c'),
+                5,
+                2,
+                42
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn migration_keeps_legacy_running_scope_explicitly_unrecorded() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("state");
+    let mut store = StateStore::open(&path).unwrap();
+    create_sealed_stage(&mut store);
+    make_ready(&mut store, "run_1");
+    store.start_native_run("run_1", "create").unwrap();
+    make_ready(&mut store, "run_2");
+    store.start_native_run("run_2", "create").unwrap();
+    store.mark_native_unknown("run_2").unwrap();
+    drop(store);
+    let db = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
+    db.execute_batch("ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version=11;").unwrap();
+    drop(db);
+    let mut store = StateStore::open(&path).unwrap();
+    let legacy = store.get_native_run("run_1").unwrap().unwrap();
+    assert_eq!(legacy.effect_state, "running");
+    assert_eq!(legacy.scope_protocol, 0);
+    assert!(legacy.operation_token.is_none());
+    assert!(legacy.worker_identity.is_none());
+    assert!(
+        store
+            .bind_native_run_worker("run_1", "create", "create:1", &get_worker_identity(12))
+            .is_err()
+    );
+    assert!(
+        store
+            .mark_native_unknown_for_operation("run_1", "create", "create:1")
+            .is_err()
+    );
+    let legacy_unknown = store.get_native_run("run_2").unwrap().unwrap();
+    assert_eq!(legacy_unknown.effect_state, "unknown");
+    assert_eq!(legacy_unknown.scope_protocol, 0);
+    assert!(legacy_unknown.worker_identity.is_none());
+}
+
+#[test]
+fn unknown_transition_revokes_an_unbound_prefork_callback() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = StateStore::open(&directory.path().join("state")).unwrap();
+    create_sealed_stage(&mut store);
+    make_ready(&mut store, "run_1");
+    store.start_native_run("run_1", "create").unwrap();
+    let unknown = store
+        .mark_native_unknown_for_operation("run_1", "create", "create:1")
+        .unwrap();
+    assert!(unknown.worker_identity.is_none());
+    assert!(
+        store
+            .bind_native_run_worker("run_1", "create", "create:1", &get_worker_identity(12))
+            .is_err()
+    );
+    assert_eq!(store.get_native_run("run_1").unwrap().unwrap(), unknown);
+}
