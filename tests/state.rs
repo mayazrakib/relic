@@ -1,6 +1,29 @@
 use relic::state::{StateError, StateStore};
 use serde_json::json;
 
+#[cfg(unix)]
+#[test]
+fn accepts_a_trusted_ancestor_alias_but_rejects_final_directory_symlink() {
+    use std::os::unix::fs::symlink;
+    let directory = tempfile::tempdir().unwrap();
+    let actual_parent = directory.path().join("actual");
+    std::fs::create_dir(&actual_parent).unwrap();
+    let alias = directory.path().join("alias");
+    symlink(&actual_parent, &alias).unwrap();
+    let store = StateStore::open(&alias.join("state")).unwrap();
+    assert!(store.check_integrity().unwrap());
+    drop(store);
+    symlink(
+        actual_parent.join("state"),
+        directory.path().join("final_alias"),
+    )
+    .unwrap();
+    assert!(matches!(
+        StateStore::open(&directory.path().join("final_alias")),
+        Err(StateError::InsecureDirectory)
+    ));
+}
+
 #[test]
 fn persists_revisioned_jobs_and_rejects_stale_updates() {
     let directory = tempfile::tempdir().unwrap();

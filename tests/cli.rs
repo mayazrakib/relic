@@ -37,7 +37,7 @@ fn command_line_validates_and_applies_disabled_jobs_through_real_daemon() {
         .arg(&state)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     let mut daemon = Daemon(daemon);
@@ -47,10 +47,18 @@ fn command_line_validates_and_applies_disabled_jobs_through_real_daemon() {
             break;
         }
 
-        assert!(
-            daemon.0.try_wait().unwrap().is_none(),
-            "daemon exited before readiness"
-        );
+        if let Some(status) = daemon.0.try_wait().unwrap() {
+            use std::io::Read;
+            let mut error = String::new();
+            daemon
+                .0
+                .stderr
+                .take()
+                .unwrap()
+                .read_to_string(&mut error)
+                .unwrap();
+            panic!("daemon exited before readiness: {status}; {error}");
+        }
         std::thread::sleep(Duration::from_millis(10));
     }
 

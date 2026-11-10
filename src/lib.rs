@@ -2,6 +2,8 @@ pub mod archive;
 pub mod config;
 pub mod contracts;
 pub mod domain;
+#[cfg(feature = "embedded-archive")]
+pub mod embedded_archive;
 pub mod identity;
 pub mod scheduler;
 pub mod service;

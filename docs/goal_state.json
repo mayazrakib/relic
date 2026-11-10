@@ -69,7 +69,8 @@
             "test_threads": 1,
             "heavy_commands": "serialized",
             "linux_enforcement": "systemd-run user transient service with MemoryMax=2G MemorySwapMax=0 TasksMax=128 CPUQuota=200%",
-            "probe": "Read memory.max=2147483648 and memory.swap.max=0 from the actual probe process cgroup; probe exited successfully."
+            "probe": "Read memory.max=2147483648 and memory.swap.max=0 from the actual probe process cgroup; probe exited successfully.",
+            "largest_reported_validation_peak": "1.6G"
         }
     },
     "tasks": [
@@ -304,15 +305,16 @@
         }
     ],
     "evidence": [
-        "docs/evidence/foundation.json"
+        "docs/evidence/foundation.json",
+        "docs/evidence/embedded_archive.json"
     ],
     "blockers": [],
-    "next_action": "Commit and push the qualified foundation milestone; inspect native CI. Continue archive engine resource/publication proofs and real source/destination preflight before enabling jobs.",
+    "next_action": "Qualify canonical path/bootstrap lock repairs and embedded engine locally under the fixed memory cap; commit and push a new milestone, then inspect fresh native CI rather than retrying unchanged jobs.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "2deb7a6d7b62f1b7f21166086ed7bf10d8701cb4a6ae0f98d4af5159eabf6b41",
+    "source_fingerprint": "8d81f91a7d2a939d4eafec6bee7e07671273759e64692c425898ac7773f4f135",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -401,10 +403,33 @@
             "evidence": [
                 ".github/workflows/ci.yml"
             ]
+        },
+        {
+            "name": "Embedded rustic_core local archive proof",
+            "status": "passed",
+            "phase": 1,
+            "evidence": [
+                "tests/embedded_archive.rs",
+                "docs/embedded_archive.md"
+            ],
+            "limits": "Small and 1MiB fixture only; no production resource/fencing or broad native profile proof"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Qualified Rust foundation, durable state, bounded configuration/calendar logic and real Unix CLI/service; 28 tests and Clippy pass under enforced memory envelope. Full-system goal remains active."
+        "result": "Foundation committed and pushed; Linux native CI passed; Windows/macOS exposed initialization portability issues. Repairs and embedded-engine proof pass 30 local tests under 2GiB/no-swap. Fresh native CI required; full goal remains active."
+    },
+    "remote_checkpoint": {
+        "commit": "fac92d9f207fb0deead39e6baaa0a38be6d68c1e",
+        "branch": "implementation/relic-full-system",
+        "native_ci_run_id": 42794446328,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42794446328",
+        "status": "completed_with_native_failures",
+        "push_transport": "existing authorized SSH credential; HTTPS OAuth credential lacks workflow scope",
+        "results": {
+            "linux-x86_64": "success",
+            "windows-x86_64": "failure: concurrent initialization DatabaseBusy",
+            "macos-arm64": "failure: daemon exited before readiness; SQLite ancestor symlink handling suspected"
+        }
     }
 }

@@ -21,8 +21,11 @@ async fn main() {
     })
     .await;
 
-    if result.is_err() {
-        eprintln!("Relic could not start or continue its local management service.");
+    if let Err(error) = result {
+        eprintln!(
+            "Relic local management service failed ({:?}).",
+            error.kind()
+        );
         std::process::exit(4);
     }
 }

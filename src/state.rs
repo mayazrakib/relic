@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
@@ -106,6 +106,85 @@ impl StateStore {
             return Err(StateError::InsecureDirectory);
         }
 
+        let canonical_directory = fs::canonicalize(directory)?;
+        let canonical_metadata = fs::metadata(&canonical_directory)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+
+            if canonical_metadata.dev() != metadata.dev()
+                || canonical_metadata.ino() != metadata.ino()
+            {
+                return Err(StateError::InsecureDirectory);
+            }
+        }
+
+        #[cfg(not(unix))]
+        if !canonical_metadata.is_dir() {
+            return Err(StateError::InsecureDirectory);
+        }
+
+        let directory = canonical_directory.as_path();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+
+            // SAFETY: geteuid has no arguments and no memory safety preconditions.
+            if metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o077 != 0 {
+                return Err(StateError::InsecureDirectory);
+            }
+        }
+
+        let mut lock_options = fs::OpenOptions::new();
+        lock_options
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            lock_options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+
+        let bootstrap_lock = lock_options.open(directory.join("state.lock"))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let lock_metadata = bootstrap_lock.metadata()?;
+
+            if !lock_metadata.is_file()
+                || lock_metadata.uid() != metadata.uid()
+                || lock_metadata.mode() & 0o077 != 0
+                || lock_metadata.nlink() != 1
+            {
+                return Err(StateError::InsecureDirectory);
+            }
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+
+        loop {
+            match bootstrap_lock.try_lock() {
+                Ok(()) => break,
+                Err(fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(fs::TryLockError::WouldBlock) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "state initialization lock timed out",
+                    )
+                    .into());
+                }
+                Err(fs::TryLockError::Error(error)) => return Err(error.into()),
+            }
+        }
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
@@ -177,6 +256,7 @@ impl StateStore {
         }
 
         transaction.commit()?;
+        drop(bootstrap_lock);
 
         Ok(Self { connection })
     }
