@@ -314,6 +314,26 @@ impl ResourcePool {
         })
     }
 
+    pub fn admit_job(&self, job_id: &str, guard: &StageGuard) -> Result<ActiveJob, ResourceError> {
+        let reservation = self.reserve(
+            job_id,
+            None,
+            Demand {
+                jobs: 1,
+                ..Demand::default()
+            },
+            guard,
+        )?;
+
+        Ok(ActiveJob {
+            lease: Arc::new(JobLease {
+                pool: self.clone(),
+                job_id: job_id.to_owned(),
+                _reservation: reservation,
+            }),
+        })
+    }
+
     pub fn reserve_control(
         &self,
         bytes: u64,
@@ -387,6 +407,45 @@ impl Drop for Reservation {
             }
         }
     }
+}
+
+struct JobLease {
+    pool: ResourcePool,
+    job_id: String,
+    _reservation: Reservation,
+}
+
+#[derive(Clone)]
+pub struct ActiveJob {
+    lease: Arc<JobLease>,
+}
+
+impl ActiveJob {
+    pub fn reserve_stage(
+        &self,
+        endpoint_id: Option<&str>,
+        demand: Demand,
+        guard: &StageGuard,
+    ) -> Result<StageReservation, ResourceError> {
+        if demand.jobs != 0 {
+            return Err(ResourceError::INVALID_REQUEST);
+        }
+
+        let reservation =
+            self.lease
+                .pool
+                .reserve(&self.lease.job_id, endpoint_id, demand, guard)?;
+
+        Ok(StageReservation {
+            _reservation: reservation,
+            _job: self.lease.clone(),
+        })
+    }
+}
+
+pub struct StageReservation {
+    _reservation: Reservation,
+    _job: Arc<JobLease>,
 }
 
 pub struct ControlReservation {

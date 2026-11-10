@@ -79,6 +79,25 @@ pub struct PublicationRecord {
     pub receipt: Option<Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureBinding {
+    pub authority_id: String,
+    pub job_id: String,
+    pub occurrence_id: String,
+    pub capture_id: String,
+    pub source_view_id: String,
+    pub consistency: String,
+    pub source_selection_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CaptureRecord {
+    pub binding: CaptureBinding,
+    pub manifest_digest: Option<String>,
+    pub manifest_entry_count: Option<String>,
+}
+
 type PublicationRow = (String, String, String, Option<String>, Option<String>);
 
 pub struct StateStore {
@@ -249,9 +268,15 @@ impl StateStore {
             transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
         match version {
-            0 => transaction
-                .execute_batch(include_str!("../database/migrations/00001_initialize.sql"))?,
-            1 => {}
+            0 => {
+                transaction
+                    .execute_batch(include_str!("../database/migrations/00001_initialize.sql"))?;
+                transaction
+                    .execute_batch(include_str!("../database/migrations/00002_capture.sql"))?;
+            }
+            1 => transaction
+                .execute_batch(include_str!("../database/migrations/00002_capture.sql"))?,
+            2 => {}
             _ => return Err(StateError::UnsupportedVersion),
         }
 
@@ -447,6 +472,98 @@ impl StateStore {
         Ok(jobs)
     }
 
+    pub fn bind_capture(&mut self, binding: &CaptureBinding) -> Result<CaptureRecord, StateError> {
+        validate_capture_binding(binding)?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let previous: Option<(String, String, String, String, String, String, String)> = transaction.query_row(
+            "SELECT capture_id, authority_id, job_id, occurrence_id, source_view_id, consistency, source_selection_digest FROM captures WHERE capture_id = ?1 OR (authority_id = ?2 AND job_id = ?3 AND occurrence_id = ?4)",
+            params![binding.capture_id, binding.authority_id, binding.job_id, binding.occurrence_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+        ).optional()?;
+        if let Some(previous) = previous {
+            let expected = (
+                binding.capture_id.clone(),
+                binding.authority_id.clone(),
+                binding.job_id.clone(),
+                binding.occurrence_id.clone(),
+                binding.source_view_id.clone(),
+                binding.consistency.clone(),
+                binding.source_selection_digest.clone(),
+            );
+            if previous != expected {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else {
+            transaction.execute("INSERT INTO captures (capture_id, authority_id, job_id, occurrence_id, source_view_id, consistency, source_selection_digest) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![binding.capture_id, binding.authority_id, binding.job_id, binding.occurrence_id, binding.source_view_id, binding.consistency, binding.source_selection_digest])?;
+        }
+        transaction.commit()?;
+        self.get_capture(&binding.capture_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn get_capture(&self, capture_id: &str) -> Result<Option<CaptureRecord>, StateError> {
+        self.connection.query_row("SELECT authority_id, job_id, occurrence_id, capture_id, source_view_id, consistency, source_selection_digest, manifest_digest, manifest_entry_count FROM captures WHERE capture_id = ?1", [capture_id], |row| {
+            Ok(CaptureRecord { binding: CaptureBinding { authority_id: row.get(0)?, job_id: row.get(1)?, occurrence_id: row.get(2)?, capture_id: row.get(3)?, source_view_id: row.get(4)?, consistency: row.get(5)?, source_selection_digest: row.get(6)? }, manifest_digest: row.get(7)?, manifest_entry_count: row.get(8)? })
+        }).optional().map_err(StateError::from)
+    }
+
+    pub fn freeze_capture_manifest(
+        &mut self,
+        capture_id: &str,
+        manifest_digest: &str,
+        entry_count: u64,
+    ) -> Result<CaptureRecord, StateError> {
+        if !is_digest(&Value::String(manifest_digest.to_owned())) {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let previous: Option<(Option<String>, Option<String>)> = transaction
+            .query_row(
+                "SELECT manifest_digest, manifest_entry_count FROM captures WHERE capture_id = ?1",
+                [capture_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let (digest, count) = previous.ok_or(StateError::EffectConflict)?;
+        let entry_count = entry_count.to_string();
+        if digest
+            .as_deref()
+            .is_some_and(|value| value != manifest_digest)
+            || count.as_deref().is_some_and(|value| value != entry_count)
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
+        if digest.is_none() {
+            transaction.execute("UPDATE captures SET manifest_digest = ?1, manifest_entry_count = ?2, system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE capture_id = ?3", params![manifest_digest, entry_count, capture_id])?;
+        }
+        transaction.commit()?;
+        self.get_capture(capture_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn list_pending_captures(
+        &self,
+        after_capture_id: &str,
+        limit: u32,
+    ) -> Result<Vec<CaptureRecord>, StateError> {
+        if !(1..=1000).contains(&limit) || after_capture_id.len() > 128 {
+            return Err(StateError::InvalidInput);
+        }
+        let mut statement = self.connection.prepare("SELECT capture_id FROM captures WHERE manifest_digest IS NULL AND capture_id > ?1 ORDER BY capture_id LIMIT ?2")?;
+        let rows = statement.query_map(params![after_capture_id, limit], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(self.get_capture(&row?)?.ok_or(StateError::EffectConflict)?);
+        }
+        Ok(records)
+    }
+
     pub fn bind_publication(&mut self, binding: &Value) -> Result<PublicationRecord, StateError> {
         validate_publication_binding(binding)?;
         let key = binding.get("commit_key").ok_or(StateError::InvalidInput)?;
@@ -466,6 +583,22 @@ impl StateStore {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let capture: Option<(String, String, String, String, String, Option<String>)> = transaction.query_row(
+            "SELECT authority_id, job_id, occurrence_id, source_view_id, consistency, manifest_digest FROM captures WHERE capture_id = ?1",
+            [binding["capture_id"].as_str().ok_or(StateError::InvalidInput)?],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+        ).optional()?;
+        let (authority, job, occurrence, view, consistency, manifest) =
+            capture.ok_or(StateError::EffectConflict)?;
+        if key["authority_id"] != authority
+            || key["job_id"] != job
+            || key["occurrence_id"] != occurrence
+            || binding["source_view_id"] != view
+            || binding["consistency"] != consistency
+            || manifest.as_deref() != binding["manifest_digest"].as_str()
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
         let prior: Option<String> = transaction
             .query_row(
                 "SELECT binding FROM publication_intents WHERE commit_key = ?1",
@@ -698,4 +831,26 @@ fn is_digest(value: &Value) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     })
+}
+
+fn validate_capture_binding(binding: &CaptureBinding) -> Result<(), StateError> {
+    let ids = [
+        &binding.authority_id,
+        &binding.job_id,
+        &binding.occurrence_id,
+        &binding.capture_id,
+        &binding.source_view_id,
+    ];
+    if ids
+        .iter()
+        .any(|id| !is_identifier(&Value::String((*id).clone())))
+        || !matches!(
+            binding.consistency.as_str(),
+            "application_consistent" | "crash_consistent" | "best_effort"
+        )
+        || !is_digest(&Value::String(binding.source_selection_digest.clone()))
+    {
+        return Err(StateError::InvalidInput);
+    }
+    Ok(())
 }

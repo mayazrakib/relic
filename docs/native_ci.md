@@ -11,3 +11,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 3. Completed Foundation Run
 
 [Run 42796543305](https://github.com/mayazrakib/relic/actions/runs/42796543305) built and tested commit `925785e3f0a8a78e49999d15313bc2d77cb9f636` successfully on all three native targets. This verifies the SQLite bootstrap and macOS ancestor-path repairs for that foundation and the included embedded self-reader tests. External executable tests remained excluded. Subsequent manifest, resource, scanner, and restore changes require their own native CI evidence.
+
+## 4. Scanner Fixture Finding
+
+[Run 42799770445](https://github.com/mayazrakib/relic/actions/runs/42799770445) passed on Linux and Windows for `4b29fee`. macOS compiled and passed the preceding tests, including the restore primitives, but failed while creating a filename containing byte `0xff`: its test filesystem returned `Illegal byte sequence` before scanning began. The corrected shared fixture uses a filename accepted by all selected native filesystems. A separate Linux test retains real non-UTF-8 filename coverage. The corrected source requires a fresh native run; the failed job remains a recorded failure.

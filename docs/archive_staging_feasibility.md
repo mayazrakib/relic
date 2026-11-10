@@ -1,0 +1,17 @@
+## 1. Engine Boundary
+
+The inspected source is [`rustic_core` 0.13.0](https://docs.rs/crate/rustic_core/0.13.0/source/src/repository.rs) and its [`copy` implementation](https://docs.rs/crate/rustic_core/0.13.0/source/src/commands/copy.rs). An isolated encrypted staging repository can hold a native snapshot before any destination snapshot is published. That staging snapshot is not the destination publication and does not itself establish source consistency or immutable ownership. The staging repository and source view need independent authority and lifecycle controls.
+
+A possible manifest path opens the staging repository with `to_indexed()`, obtains the selected node with `node_from_snapshot_path`, and enumerates it with `ls` and `LsOptions::default()`. For each regular file, `open_file` and repeated `read_file_at` calls can feed SHA-256 without an intentional plaintext temporary file. Paths, supported metadata, source identity, canonical byte ordering, duplicate detection, and required losses still need independent validation. The `Node::name()` method decodes native names; direct use of its escaped `name` field is incorrect. The Windows non-Unicode symlink target implementation is explicitly incomplete in the inspected source.
+
+## 2. Copy and Publication
+
+After the logical manifest is frozen, a source repository in `IndexedFull` state can call `copy` with a destination in `IndexedIds` state and the selected snapshot. The implementation collects required trees and data blobs, copies and re-encrypts them, finalizes the destination index, and saves destination snapshot records last. That last save is the native destination publication. Copying clears snapshot IDs and parent references. A caller can attach publication binding tags to the copied snapshot value before copying, but must reconcile the destination's native ID and validate the binding and content afterward.
+
+`copy` returns no destination snapshot ID and can create duplicates. Its `relevant_copy_snapshots` helper is not a logical idempotency oracle: version 0.13.0 compares `SnapshotFile` values by timestamp when storing them in a `BTreeSet`. Different snapshots with the same timestamp can therefore compare equal. A timeout or crash during publication requires destination reconciliation, and an unknown outcome must not trigger a blind retry. Source code also uses `filter_map` when resolving required tree and data IDs for copy; a successful call alone is not proof that every referenced blob was present. Validate the source and verify destination closure and content separately.
+
+## 3. Resource and Safety Limits
+
+`to_indexed()` loads the complete index into memory and constructs a fixed 32 MB in-memory cache. Copy collects tree and data IDs in sets and vectors and uses parallel work; neither a hard memory cap nor cancellation is exposed by these high-level APIs. The progress callbacks return no cancellation result. A guard can run between calls, but cannot interrupt a blocking engine call. `read_file_at` allocates the requested output and may load full underlying blobs; a small requested range alone is not a hard memory bound. Disabling the engine disk cache with `no_cache(true)` does not prove absence of all plaintext temporary or swap paths.
+
+The approach remains feasibility evidence only. Fenced serialization, crash-safe admission and receipts, immutable source views, manifest identity binding, encrypted staging lifecycle, platform metadata, and adversarial resource limits remain required before production use.

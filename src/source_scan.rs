@@ -21,6 +21,7 @@ pub enum ScanError {
     LIMIT_EXCEEDED,
     UNSUPPORTED_ENTRY,
     CHANGED,
+    MOUNT_BOUNDARY,
     IO(std::io::Error),
     SPOOL(SpoolError),
     RESOURCE(ResourceError),
@@ -34,6 +35,7 @@ impl fmt::Display for ScanError {
             Self::LIMIT_EXCEEDED => "scanner limit exceeded",
             Self::UNSUPPORTED_ENTRY => "unsupported source entry",
             Self::CHANGED => "source changed during scan",
+            Self::MOUNT_BOUNDARY => "source mount traversal is disabled",
             Self::IO(_) => "source I/O failed",
             Self::SPOOL(_) => "manifest spool failed",
             Self::RESOURCE(_) => "source scan canceled or resource limit reached",
@@ -186,6 +188,13 @@ mod unix {
 
     fn open_at(fd: RawFd, name: &CStr, is_directory: bool) -> Result<File, ScanError> {
         let mut flags = libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC;
+
+        #[cfg(target_os = "linux")]
+        if !is_directory {
+            // O_PATH pins the inode without invoking a device's open operation.
+            flags = libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+        }
+
         if is_directory {
             flags |= libc::O_DIRECTORY;
         }
@@ -198,6 +207,46 @@ mod unix {
         Ok(unsafe { File::from_raw_fd(opened) })
     }
 
+    fn open_file_for_reading(file: File) -> Result<File, ScanError> {
+        let before = get_stat(file.as_raw_fd())?;
+
+        if before.st_mode & libc::S_IFMT != libc::S_IFREG {
+            return Err(ScanError::UNSUPPORTED_ENTRY);
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let path = CString::new(format!("/proc/self/fd/{}", file.as_raw_fd()))
+                .map_err(|_| ScanError::UNSUPPORTED_ENTRY)?;
+            // The live O_PATH descriptor pins a verified regular inode. This kernel
+            // procfs reference intentionally follows that descriptor, not a source name.
+            let descriptor = unsafe {
+                libc::open(
+                    path.as_ptr(),
+                    libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                )
+            };
+
+            if descriptor < 0 {
+                return Err(io::Error::last_os_error().into());
+            }
+
+            // A successful open returned a fresh descriptor owned only by this File.
+            let readable = unsafe { File::from_raw_fd(descriptor) };
+
+            if !matches_stat(&before, &get_stat(readable.as_raw_fd())?) {
+                return Err(ScanError::CHANGED);
+            }
+
+            Ok(readable)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Ok(file)
+        }
+    }
+
     struct Scanner<'a> {
         source_id: &'a str,
         spool: &'a mut ManifestSpool,
@@ -205,6 +254,7 @@ mod unix {
         guard: &'a StageGuard,
         entries: u64,
         total_bytes: u64,
+        root_device: libc::dev_t,
         path: Vec<String>,
     }
 
@@ -293,6 +343,11 @@ mod unix {
                 let name_c =
                     CString::new(name.clone()).map_err(|_| ScanError::UNSUPPORTED_ENTRY)?;
                 let initial = get_entry_stat(directory.fd(), &name_c)?;
+
+                if initial.st_dev != self.root_device {
+                    return Err(ScanError::MOUNT_BOUNDARY);
+                }
+
                 let kind = initial.st_mode & libc::S_IFMT;
                 if kind != libc::S_IFREG && kind != libc::S_IFDIR {
                     return Err(ScanError::UNSUPPORTED_ENTRY);
@@ -306,7 +361,7 @@ mod unix {
                 if kind == libc::S_IFDIR {
                     self.scan_directory(child, &opened, depth + 1)?;
                 } else {
-                    self.scan_file(child, &opened)?;
+                    self.scan_file(open_file_for_reading(child)?, &opened)?;
                 }
                 self.path.pop();
                 if !matches_stat(&opened, &get_entry_stat(directory.fd(), &name_c)?) {
@@ -328,7 +383,7 @@ mod unix {
         guard: &StageGuard,
     ) -> Result<ManifestSpool, ScanError> {
         if limits.max_depth > 128
-            || limits.max_open_files < limits.max_depth.saturating_add(2)
+            || limits.max_open_files < limits.max_depth.saturating_add(3)
             || limits.max_entries == 0
             || limits.max_file_bytes == 0
             || limits.max_total_bytes == 0
@@ -362,6 +417,7 @@ mod unix {
             guard,
             entries: 0,
             total_bytes: 0,
+            root_device: before.st_dev,
             path: Vec::new(),
         };
         scanner.scan_directory(file, &before, 0)?;
@@ -370,6 +426,46 @@ mod unix {
         }
         guard.check()?;
         Ok(spool)
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    mod tests {
+        use std::fs::{self, File, OpenOptions};
+        use std::io::Read;
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::{OpenOptionsExt, symlink};
+
+        use super::{ScanError, open_at, open_file_for_reading};
+
+        #[test]
+        fn pinned_regular_file_is_not_reopened_by_mutable_source_name() {
+            let temporary = tempfile::tempdir().unwrap();
+            let original = temporary.path().join("content");
+            fs::write(&original, b"verified content").unwrap();
+            let directory = File::open(temporary.path()).unwrap();
+            let pinned = open_at(directory.as_raw_fd(), c"content", false).unwrap();
+            fs::rename(&original, temporary.path().join("moved")).unwrap();
+            symlink("/dev/null", &original).unwrap();
+            let mut readable = open_file_for_reading(pinned).unwrap();
+            let mut bytes = Vec::new();
+            readable.read_to_end(&mut bytes).unwrap();
+
+            assert_eq!(bytes, b"verified content");
+        }
+
+        #[test]
+        fn device_path_handle_is_rejected_before_content_open() {
+            let path_handle = OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_PATH | libc::O_CLOEXEC)
+                .open("/dev/null")
+                .unwrap();
+
+            assert!(matches!(
+                open_file_for_reading(path_handle),
+                Err(ScanError::UNSUPPORTED_ENTRY)
+            ));
+        }
     }
 }
 

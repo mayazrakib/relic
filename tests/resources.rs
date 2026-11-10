@@ -252,3 +252,79 @@ fn releases_interleaved_reservations_without_losing_shared_identity() {
     drop(third);
     assert_eq!(pool.usage().unwrap().0, Demand::default());
 }
+
+#[test]
+fn active_job_remains_admitted_until_all_stages_are_dropped() {
+    let pool = ResourcePool::new(ResourceClass::LOW, 4);
+    let job = pool.admit_job("job_1", &guard()).unwrap();
+    let stage = job
+        .reserve_stage(
+            Some("destination"),
+            Demand {
+                streams: 1,
+                data_bytes: 4096,
+                ..Demand::default()
+            },
+            &guard(),
+        )
+        .unwrap();
+    let other_stage = job
+        .reserve_stage(
+            Some("destination"),
+            Demand {
+                open_files: 1,
+                ..Demand::default()
+            },
+            &guard(),
+        )
+        .unwrap();
+    assert!(matches!(
+        job.reserve_stage(
+            None,
+            Demand {
+                jobs: 1,
+                ..Demand::default()
+            },
+            &guard()
+        ),
+        Err(ResourceError::INVALID_REQUEST)
+    ));
+    drop(job);
+    assert_eq!(pool.usage().unwrap().0.jobs, 1);
+    assert!(matches!(
+        pool.admit_job("job_2", &guard()),
+        Err(ResourceError::EXHAUSTED)
+    ));
+    drop(stage);
+    assert_eq!(pool.usage().unwrap().0.jobs, 1);
+    drop(other_stage);
+    assert_eq!(pool.usage().unwrap().0, Demand::default());
+    assert!(pool.admit_job("job_2", &guard()).is_ok());
+}
+
+#[test]
+fn failed_or_canceled_stage_does_not_change_job_lease() {
+    let pool = ResourcePool::new(ResourceClass::LOW, 4);
+    let canceled = guard();
+    canceled.cancellation.cancel();
+    assert!(matches!(
+        pool.admit_job("job", &canceled),
+        Err(ResourceError::CANCELED)
+    ));
+    let job = pool.admit_job("job", &guard()).unwrap();
+    assert!(matches!(
+        job.reserve_stage(
+            None,
+            Demand {
+                streams: 1,
+                ..Demand::default()
+            },
+            &canceled
+        ),
+        Err(ResourceError::CANCELED)
+    ));
+    assert_eq!(pool.usage().unwrap().0.jobs, 1);
+    assert_eq!(pool.usage().unwrap().0.streams, 0);
+    drop(job);
+    assert_eq!(pool.usage().unwrap().0, Demand::default());
+}

@@ -1,7 +1,28 @@
-use relic::state::{StateError, StateStore};
+use relic::state::{CaptureBinding, StateError, StateStore};
 use serde_json::json;
 
 #[cfg(unix)]
+fn prepare_capture(store: &mut StateStore, binding: &serde_json::Value) {
+    let key = &binding["commit_key"];
+    let capture = CaptureBinding {
+        authority_id: key["authority_id"].as_str().unwrap().into(),
+        job_id: key["job_id"].as_str().unwrap().into(),
+        occurrence_id: key["occurrence_id"].as_str().unwrap().into(),
+        capture_id: binding["capture_id"].as_str().unwrap().into(),
+        source_view_id: binding["source_view_id"].as_str().unwrap().into(),
+        consistency: binding["consistency"].as_str().unwrap().into(),
+        source_selection_digest: binding["policy_digest"].as_str().unwrap().into(),
+    };
+    store.bind_capture(&capture).unwrap();
+    store
+        .freeze_capture_manifest(
+            &capture.capture_id,
+            binding["manifest_digest"].as_str().unwrap(),
+            1,
+        )
+        .unwrap();
+}
+
 #[test]
 fn accepts_a_trusted_ancestor_alias_but_rejects_final_directory_symlink() {
     use std::os::unix::fs::symlink;
@@ -51,6 +72,7 @@ fn binds_intent_once_and_retains_uncertainty_across_reopen() {
     let mut store = StateStore::open(&directory.path().join("state")).unwrap();
     let binding: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/contracts/publication.json")).unwrap();
+    prepare_capture(&mut store, &binding);
     let record = store.bind_publication(&binding).unwrap();
     assert_eq!(record.effect_state, "prepared");
     assert_eq!(
@@ -113,6 +135,7 @@ fn persists_one_receipt_and_never_overwrites_it_on_retry() {
         serde_json::from_str(include_str!("../fixtures/contracts/publication.json")).unwrap();
     let receipt: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/contracts/receipt.json")).unwrap();
+    prepare_capture(&mut store, &binding);
     store.bind_publication(&binding).unwrap();
     assert!(matches!(
         store.record_receipt(&receipt),
@@ -187,6 +210,7 @@ fn rejects_invalid_publication_and_lists_recovery_in_pages() {
         store.bind_publication(&invalid),
         Err(StateError::InvalidInput)
     ));
+    prepare_capture(&mut store, &binding);
     let mut other = binding.clone();
     other["commit_key"]["destination_id"] = json!("second");
     for value in [&binding, &other] {

@@ -168,3 +168,35 @@ fn accepts_private_parent_alias_and_rejects_shared_parent() {
         Err(SpoolError::INSECURE_DIRECTORY)
     ));
 }
+
+#[test]
+fn guarded_iteration_honors_cancellation_and_deadline() {
+    use relic::resources::{ResourceError, StageGuard};
+    use std::time::{Duration, Instant};
+    let directory = private_directory();
+    let mut spool =
+        ManifestSpool::create(&directory.path().join("manifest.sqlite"), limits()).unwrap();
+    spool.add_entry(&entry()).unwrap();
+    let guard = StageGuard::default();
+    let token = guard.cancellation.clone();
+    let result = spool.visit_sorted_with_guard(&guard, |_| {
+        token.cancel();
+        Ok(())
+    });
+    assert!(matches!(
+        result,
+        Err(SpoolError::RESOURCE(ResourceError::CANCELED))
+    ));
+    assert!(matches!(
+        spool.finish_with_guard("capture_1", &guard),
+        Err(SpoolError::RESOURCE(ResourceError::CANCELED))
+    ));
+    let deadline = StageGuard {
+        deadline: Some(Instant::now() - Duration::from_secs(1)),
+        ..StageGuard::default()
+    };
+    assert!(matches!(
+        spool.finish_with_guard("capture_1", &deadline),
+        Err(SpoolError::RESOURCE(ResourceError::DEADLINE_EXCEEDED))
+    ));
+}

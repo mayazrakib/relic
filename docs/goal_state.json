@@ -132,7 +132,7 @@
                 1,
                 2
             ],
-            "status": "pending",
+            "status": "running",
             "acceptance": [
                 "Local and S3 encrypted archive with metadata reports",
                 "Selective and full restore with traversal defenses",
@@ -307,15 +307,16 @@
     "evidence": [
         "docs/evidence/foundation.json",
         "docs/evidence/embedded_archive.json",
-        "docs/evidence/bounded_primitives.json"
+        "docs/evidence/bounded_primitives.json",
+        "docs/evidence/capture_admission.json"
     ],
     "blockers": [],
-    "next_action": "Push the tested bounded-primitives milestone to the implementation branch and inspect its fresh native CI. Continue production source authority, encrypted capture staging, resource-pool integration, planner, and destination publication without reducing the complete goal.",
+    "next_action": "Push tested capture-admission milestone to implementation branch for fresh native CI. Continue endpoint resolver/source authority, encrypted ordering and staging lifecycle, archive resource/cancellation qualification, and fenced publication. Do not infer production readiness from component fixture passes.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "45b75c365c6ddceb6945fb6430b9d57ca0ac3f6fec1f04a0b050f77eaa8762c8",
+    "source_fingerprint": "71d0ffd14a2f2cd5768052a26332760c4ee9a695d5ddeca86d7ee3f87cc4de4f",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -476,13 +477,81 @@
                 "docs/evidence/bounded_primitives.json"
             ],
             "limits": "Tiny Linux fixture after source removal; no other native independent recovery proof"
+        },
+        {
+            "name": "Resolved-evidence policy preflight",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/planner.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Supplied evidence only; no real resolver, live probing, resource reservation, or execution authority"
+        },
+        {
+            "name": "Durable capture binding and immutable manifest freeze",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/capture_state.rs",
+                "tests/capture_pipeline.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Caller must prove view, selected content, artifact durability and source admission"
+        },
+        {
+            "name": "Authenticated encrypted spool and streaming manifest artifact",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/encrypted_spool.rs",
+                "tests/manifest_artifact.rs",
+                "tests/capture_pipeline.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Internal format; no independent crypto review, production key management, encrypted ordering store, or crash cleanup"
+        },
+        {
+            "name": "Active-job leases retained by stage reservations",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "tests/resources.rs",
+                "tests/capture_pipeline.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Production daemon/adapter integration still pending"
+        },
+        {
+            "name": "Linux regular-inode pinning and device-boundary scan",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/source_scan.rs",
+                "src/source_scan.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Trusted procfs required; same-device bind mounts, macOS mutable-device isolation and full metadata remain pending"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Sixty local tests pass with zero ignored, including both engine interoperability directions. Feature-enabled Clippy and formatting pass. Added bounded manifests/spool, resource reservations, best-effort Unix scanner, and Unix restore primitives; foundation CI passed three native targets. Full-system goal remains active."
+        "result": "Added policy preflight, capture migration/bindings, authenticated spool/manifest streams, active-job leases, and Linux inode pinning. Eighty-one local tests, feature-enabled Clippy and formatting pass under the fixed 2GiB/no-swap cap. Recorded and corrected native macOS fixture assumption; fresh CI required. Full goal remains active."
     },
     "remote_checkpoint": {
+        "commit": "4b29fee9703bd8bbad9d645179fc1a5dedbab79c",
+        "branch": "implementation/relic-full-system",
+        "native_ci_run_id": 42799770445,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42799770445",
+        "status": "completed_with_native_fixture_failure",
+        "push_transport": "existing authorized SSH credential",
+        "results": {
+            "linux-x86_64": "success",
+            "windows-x86_64": "success",
+            "macos-arm64": "failure: invalid-byte fixture creation EILSEQ before scanner execution"
+        }
+    },
+    "prior_native_checkpoint": {
         "commit": "925785e3f0a8a78e49999d15313bc2d77cb9f636",
         "branch": "implementation/relic-full-system",
         "native_ci_run_id": 42796543305,
@@ -495,17 +564,29 @@
             "macos-arm64": "success"
         }
     },
-    "prior_native_checkpoint": {
-        "commit": "fac92d9f207fb0deead39e6baaa0a38be6d68c1e",
-        "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42794446328,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42794446328",
-        "status": "completed_with_native_failures",
-        "push_transport": "existing authorized SSH credential; HTTPS OAuth credential lacks workflow scope",
-        "results": {
-            "linux-x86_64": "success",
-            "windows-x86_64": "failure: concurrent initialization DatabaseBusy",
-            "macos-arm64": "failure: daemon exited before readiness; SQLite ancestor symlink handling suspected"
+    "earlier_native_checkpoints": [
+        {
+            "commit": "fac92d9f207fb0deead39e6baaa0a38be6d68c1e",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42794446328,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42794446328",
+            "status": "completed_with_native_failures",
+            "push_transport": "existing authorized SSH credential; HTTPS OAuth credential lacks workflow scope",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "failure: concurrent initialization DatabaseBusy",
+                "macos-arm64": "failure: daemon exited before readiness; SQLite ancestor symlink handling suspected"
+            }
+        }
+    ],
+    "failure_controls": {
+        "macos_invalid_byte_fixture": {
+            "initial_run": 42799770445,
+            "initial_commit": "4b29fee9703bd8bbad9d645179fc1a5dedbab79c",
+            "observed_error": "EILSEQ while creating byte 0xff filename on native test filesystem",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Shared ASCII native fixture plus explicit Linux non-UTF-8 fixture; fresh native execution pending"
         }
     }
 }

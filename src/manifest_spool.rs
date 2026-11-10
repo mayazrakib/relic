@@ -8,6 +8,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use rusqlite::{Connection, OpenFlags, params};
 
 use crate::manifest::{ManifestEntry, ManifestError, ManifestHeader, ManifestValidator};
+use crate::resources::{ResourceError, StageGuard};
 
 const PAGE_BYTES: u64 = 4096;
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -32,6 +33,7 @@ pub enum SpoolError {
     DATABASE(rusqlite::Error),
     JSON(serde_json::Error),
     MANIFEST(ManifestError),
+    RESOURCE(ResourceError),
 }
 
 impl fmt::Display for SpoolError {
@@ -50,6 +52,7 @@ impl fmt::Display for SpoolError {
             Self::DATABASE(error) => write!(formatter, "spool database: {error}"),
             Self::JSON(error) => write!(formatter, "spool encoding: {error}"),
             Self::MANIFEST(error) => write!(formatter, "spool manifest: {error}"),
+            Self::RESOURCE(error) => write!(formatter, "spool resource guard: {error}"),
         }
     }
 }
@@ -77,6 +80,12 @@ impl From<serde_json::Error> for SpoolError {
 impl From<ManifestError> for SpoolError {
     fn from(error: ManifestError) -> Self {
         Self::MANIFEST(error)
+    }
+}
+
+impl From<ResourceError> for SpoolError {
+    fn from(error: ResourceError) -> Self {
+        Self::RESOURCE(error)
     }
 }
 
@@ -207,34 +216,47 @@ impl ManifestSpool {
     }
 
     pub fn finish(&self, capture_id: &str) -> Result<String, SpoolError> {
-        if self.is_poisoned {
-            return Err(SpoolError::POISONED);
-        }
+        self.finish_with_guard(capture_id, &StageGuard::default())
+    }
 
+    pub fn finish_with_guard(
+        &self,
+        capture_id: &str,
+        guard: &StageGuard,
+    ) -> Result<String, SpoolError> {
+        guard.check()?;
         let header = ManifestHeader {
             schema_version: 1,
             capture_id: capture_id.to_owned(),
             entry_count: self.count.to_string(),
         };
         let mut validator = ManifestValidator::new(&header)?;
-        let mut statement = self
-            .connection
-            .prepare("SELECT frame FROM entries ORDER BY sort_key")?;
-        let mut rows = statement.query([])?;
-
-        while let Some(row) = rows.next()? {
-            let frame: Vec<u8> = row.get(0)?;
-            let entry: ManifestEntry = serde_json::from_slice(&frame)?;
-            validator.add_entry(&entry)?;
-        }
-
-        Ok(validator.finish()?)
+        self.visit_sorted_with_guard(guard, |entry| {
+            validator.add_entry(entry)?;
+            Ok(())
+        })?;
+        guard.check()?;
+        let digest = validator.finish()?;
+        guard.check()?;
+        Ok(digest)
     }
 
-    pub fn visit_sorted<F>(&self, mut visit: F) -> Result<(), SpoolError>
+    pub fn visit_sorted<F>(&self, visit: F) -> Result<(), SpoolError>
     where
         F: FnMut(&ManifestEntry) -> Result<(), SpoolError>,
     {
+        self.visit_sorted_with_guard(&StageGuard::default(), visit)
+    }
+
+    pub fn visit_sorted_with_guard<F>(
+        &self,
+        guard: &StageGuard,
+        mut visit: F,
+    ) -> Result<(), SpoolError>
+    where
+        F: FnMut(&ManifestEntry) -> Result<(), SpoolError>,
+    {
+        guard.check()?;
         if self.is_poisoned {
             return Err(SpoolError::POISONED);
         }
@@ -243,13 +265,20 @@ impl ManifestSpool {
             .connection
             .prepare("SELECT frame FROM entries ORDER BY sort_key")?;
         let mut rows = statement.query([])?;
-
-        while let Some(row) = rows.next()? {
+        loop {
+            guard.check()?;
+            let Some(row) = rows.next()? else {
+                break;
+            };
+            guard.check()?;
             let frame: Vec<u8> = row.get(0)?;
             let entry: ManifestEntry = serde_json::from_slice(&frame)?;
+            guard.check()?;
             visit(&entry)?;
+            guard.check()?;
         }
 
+        guard.check()?;
         Ok(())
     }
 

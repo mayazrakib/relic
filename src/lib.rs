@@ -4,9 +4,12 @@ pub mod contracts;
 pub mod domain;
 #[cfg(feature = "embedded-archive")]
 pub mod embedded_archive;
+pub mod encrypted_spool;
 pub mod identity;
 pub mod manifest;
+pub mod manifest_artifact;
 pub mod manifest_spool;
+pub mod planner;
 pub mod resources;
 pub mod restore;
 pub mod scheduler;

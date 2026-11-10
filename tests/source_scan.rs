@@ -1,6 +1,7 @@
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::symlink;
 
@@ -31,7 +32,7 @@ fn make_spool(directory: &std::path::Path) -> ManifestSpool {
 fn get_limits() -> ScanLimits {
     ScanLimits {
         max_depth: 8,
-        max_open_files: 10,
+        max_open_files: 11,
         max_entries: 100,
         max_file_bytes: 1024 * 1024,
         max_total_bytes: 2 * 1024 * 1024,
@@ -39,13 +40,13 @@ fn get_limits() -> ScanLimits {
 }
 
 #[test]
-fn scans_unsorted_non_utf8_names_and_hashes_file_bytes() {
+fn scans_unsorted_names_and_hashes_file_bytes() {
     let directory = private_directory();
     let root = directory.path().join("source");
     fs::create_dir(&root).unwrap();
     fs::create_dir(root.join("dir")).unwrap();
     fs::write(root.join("dir").join("child"), b"abc").unwrap();
-    fs::write(root.join(std::ffi::OsString::from_vec(vec![0xff])), b"").unwrap();
+    fs::write(root.join("z_last"), b"").unwrap();
     let spool = scan_source(
         &root,
         "source_1",
@@ -69,7 +70,35 @@ fn scans_unsorted_non_utf8_names_and_hashes_file_bytes() {
         files[0].1.as_deref(),
         Some("sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     );
-    assert_eq!(files[1].0, vec!["_w"]);
+    assert_eq!(files[1].0, vec!["el9sYXN0"]);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn preserves_non_utf8_names_on_linux_filesystem() {
+    let directory = private_directory();
+    let root = directory.path().join("source");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join(std::ffi::OsString::from_vec(vec![0xff])), b"").unwrap();
+    let spool = scan_source(
+        &root,
+        "source_1",
+        make_spool(directory.path()),
+        get_limits(),
+        &StageGuard::default(),
+    )
+    .unwrap();
+    let mut files = Vec::new();
+    spool
+        .visit_sorted(|entry| {
+            if entry.kind == "file" {
+                files.push(entry.path.clone());
+            }
+
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(files, vec![vec!["_w"]]);
 }
 
 #[test]
