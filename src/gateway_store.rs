@@ -27,6 +27,10 @@ const SCRATCH_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_REPOSITORY_BYTES: u64 = 512 * 1024 * 1024;
 const MIN_FREE_BYTES: u64 = 512 * 1024 * 1024;
 
+#[path = "gateway_publication.rs"]
+mod publication;
+pub use publication::GatewayPublicationSource;
+
 #[derive(Debug)]
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub enum GatewayStoreError {

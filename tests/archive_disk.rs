@@ -1031,3 +1031,312 @@ fn persists_combined_capture_and_source_quota_after_leases_end() {
     assert!(!fixture.root.join("disk/archive_stage_4.catalog").exists());
     assert!(!fixture.root.join("disk/.archive_stage_4.lock").exists());
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires delegated Linux cgroup guard and verified independent restic"]
+fn gateway_publication_recovers_and_retries_only_after_strict_negative_proof() {
+    use relic::archive::Archive;
+    use relic::gateway_state::{GatewayAdmissionBinding, GatewayResourceBinding};
+    use relic::gateway_store::{
+        GatewayExecutionContext, GatewayPublicationSource, LocalGatewayStore,
+    };
+    use relic::native_run_store::{NativeRunExecution, NativeRunStore};
+    use relic::state::NativeRunBinding;
+    use relic::worker_runtime::WorkerLimits;
+    use serde_json::json;
+    use std::time::Duration;
+
+    fn create_admission(
+        state: &mut StateStore,
+        capture: &CaptureBinding,
+        expected: &ManifestArtifact,
+        repository_id: &str,
+        native_snapshot: &str,
+        destination: &str,
+        admission_id: &str,
+    ) -> GatewayAdmissionBinding {
+        let mut policy: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/contracts/policy.json")).unwrap();
+        policy["job"]["job_id"] = json!(capture.job_id);
+        policy["job"]["verification"]["publication"] = json!("data_verified");
+        policy["destination"]["destination_id"] = json!(destination);
+        policy["destination"]["repository_id"] = json!(repository_id);
+        policy["job"]["destinations"][0]["destination_id"] = json!(destination);
+        policy["job"]["destinations"][0]["repository_id"] = json!(repository_id);
+        policy["verification"] = json!("data_verified");
+        let digest = relic::identity::hash_domain("relic/effective-policy/v1", &policy).unwrap();
+        let key = json!({"authority_id":capture.authority_id,"job_id":capture.job_id,"occurrence_id":capture.occurrence_id,"destination_id":destination});
+        let publication = state.bind_publication(&json!({"commit_key":key,"capture_id":capture.capture_id,"consistency":capture.consistency,"destination_config_revision":"1","manifest_digest":expected.digest,"policy_digest":digest,"source_view_id":capture.source_view_id})).unwrap();
+        GatewayAdmissionBinding {
+            resource_id: "gateway_resource".into(),
+            admission_id: admission_id.into(),
+            commit_key: key,
+            payload_hash: publication.payload_hash,
+            native_run_id: "run_1".into(),
+            native_snapshot_id: native_snapshot.into(),
+            capture_id: capture.capture_id.clone(),
+            manifest_digest: expected.digest.clone(),
+            owner: "local_owner".into(),
+            effective_policy: policy,
+        }
+    }
+
+    let mut fixture = Fixture::create(131_089);
+    let guard = StageGuard::default();
+    drop(fixture.create_source("stage_1", &guard).unwrap());
+    let native_root = fixture.root.join("native_runs");
+    create_private_directory(&native_root);
+    let native_store =
+        NativeRunStore::new(get_endpoint(&native_root), &native_root, "native_storage").unwrap();
+    let native_binding = NativeRunBinding {
+        run_id: "run_1".into(),
+        stage_id: "stage_1".into(),
+        storage_endpoint_id: "native_storage".into(),
+        storage_identity: native_store.storage_identity().into(),
+        relative_name: "native_run_1".into(),
+        repository_key_ref: "native_key".into(),
+    };
+    native_store
+        .prepare(&mut fixture.state, &native_binding, &guard)
+        .unwrap();
+    let limits = WorkerLimits {
+        memory_max_bytes: 192 * 1024 * 1024,
+        memory_high_bytes: 144 * 1024 * 1024,
+        max_tasks: 64,
+        max_open_files: 64,
+        max_runtime: Duration::from_secs(120),
+        max_output_bytes: 16 * 1024 + 4,
+    };
+    let pool = ResourcePool::new(ResourceClass::BALANCED, 2);
+    let job = pool.admit_job("job_1", &guard).unwrap();
+    let state_dir = fixture.root.join("state");
+    let archive_dir = fixture.root.join("disk");
+    let native_context = NativeRunExecution {
+        executable: Path::new(env!("CARGO_BIN_EXE_relic-worker")),
+        state_dir: &state_dir,
+        archive_dir: &archive_dir,
+        source_key_ref: "archive_key",
+        source_key: &fixture.key,
+        repository_key_ref: "native_key",
+        repository_password: "native-test-password",
+        source_limits: get_disk_limits(),
+        worker_limits: limits,
+        job: &job,
+        guard: &guard,
+    };
+    let native = native_store
+        .execute(&mut fixture.state, "run_1", &native_context)
+        .unwrap();
+    assert_eq!(native.effect_state, "verified");
+    let native_snapshot = native.native_snapshot_id.unwrap();
+    drop(native_store);
+
+    let target = fixture.root.join("gateway_target");
+    create_private_directory(&target);
+    let gateway =
+        LocalGatewayStore::new(get_endpoint(&target), &target, "gateway_storage").unwrap();
+    let gateway_binding = GatewayResourceBinding {
+        resource_id: "gateway_resource".into(),
+        authority_id: fixture.capture.authority_id.clone(),
+        storage_endpoint_id: "gateway_storage".into(),
+        storage_identity: gateway.storage_identity().into(),
+        repository_key_ref: "gateway_key".into(),
+    };
+    gateway
+        .prepare(&mut fixture.state, &gateway_binding, &guard)
+        .unwrap();
+    let gateway_context = GatewayExecutionContext {
+        executable: Path::new(env!("CARGO_BIN_EXE_relic-gateway-worker")),
+        state_dir: &state_dir,
+        target_key_ref: "gateway_key",
+        target_password: "gateway-test-password",
+        repository_max_bytes: 64 * 1024 * 1024,
+        worker_limits: limits,
+        job: &job,
+        guard: &guard,
+    };
+    let resource = gateway
+        .initialize(&mut fixture.state, "gateway_resource", &gateway_context)
+        .unwrap();
+    let repository_id = resource.repository_id.unwrap();
+    let source_path = native_root.join("native_run_1/repository");
+    let source = GatewayPublicationSource {
+        repository_dir: &source_path,
+        repository_key_ref: "native_key",
+        repository_password: "native-test-password",
+    };
+    let first = create_admission(
+        &mut fixture.state,
+        &fixture.capture,
+        &fixture.expected,
+        &repository_id,
+        &native_snapshot,
+        "destination_1",
+        "admission_1",
+    );
+    let receipt = gateway
+        .publish(&mut fixture.state, &first, &source, &gateway_context)
+        .unwrap();
+    assert_eq!(receipt["commit_key"], first.commit_key);
+    assert_eq!(receipt["resource_id"], "gateway_resource");
+    assert_eq!(receipt["repository_id"], repository_id);
+    assert_eq!(receipt["manifest_digest"], fixture.expected.digest);
+    assert_eq!(receipt["verification"], "data_verified");
+    let first_snapshot = receipt["native_result_id"].as_str().unwrap().to_owned();
+    assert_eq!(first_snapshot.len(), 64);
+
+    let second = create_admission(
+        &mut fixture.state,
+        &fixture.capture,
+        &fixture.expected,
+        &repository_id,
+        &native_snapshot,
+        "destination_2",
+        "admission_2",
+    );
+    fixture
+        .state
+        .admit_gateway_publication(&second, 1, 1)
+        .unwrap();
+    fixture
+        .state
+        .start_gateway_execution("admission_2", 1, 1)
+        .unwrap();
+    let corrupt = target.join("snapshots").join("f".repeat(64));
+    assert!(!corrupt.exists());
+    fs::write(&corrupt, b"not an authenticated native snapshot").unwrap();
+    assert!(
+        gateway
+            .reconcile_publication(&mut fixture.state, "admission_2", &gateway_context)
+            .is_err()
+    );
+    let execution = fixture
+        .state
+        .list_gateway_executions("admission_2")
+        .unwrap();
+    assert_eq!(execution[0].effect_state, "unknown");
+    assert_eq!(execution[0].verify_attempts, 1);
+    fs::remove_file(&corrupt).unwrap();
+    assert!(
+        gateway
+            .reconcile_publication(&mut fixture.state, "admission_2", &gateway_context)
+            .unwrap()
+            .is_none()
+    );
+    let execution = fixture
+        .state
+        .list_gateway_executions("admission_2")
+        .unwrap();
+    assert_eq!(execution[0].effect_state, "proven_unpublished");
+    assert_eq!(execution[0].verify_attempts, 2);
+    let second_receipt = gateway
+        .publish(&mut fixture.state, &second, &source, &gateway_context)
+        .unwrap();
+    assert_eq!(second_receipt["commit_key"], second.commit_key);
+    assert_eq!(
+        fixture
+            .state
+            .list_gateway_executions("admission_2")
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        fixture
+            .state
+            .list_gateway_executions("admission_2")
+            .unwrap()[1]
+            .effect_state,
+        "verified"
+    );
+    let before = fs::read_dir(target.join("snapshots")).unwrap().count();
+    assert_eq!(before, 2);
+
+    // Model a crash after native publication but before the first receipt was persisted.
+    let database = rusqlite::Connection::open(state_dir.join("state.sqlite3")).unwrap();
+    database.execute_batch("BEGIN IMMEDIATE; UPDATE publication_intents SET effect_state='unknown',native_result_id=NULL,receipt=NULL WHERE commit_key=(SELECT commit_key FROM gateway_admissions WHERE admission_id='admission_1'); UPDATE gateway_executions SET effect_state='unknown',native_result_id=NULL WHERE admission_id='admission_1' AND ordinal=1; COMMIT;").unwrap();
+    drop(database);
+    fs::remove_dir_all(&native_root).unwrap();
+    fs::remove_dir_all(&archive_dir).unwrap();
+    drop(gateway);
+    let gateway =
+        LocalGatewayStore::new(get_endpoint(&target), &target, "gateway_storage").unwrap();
+    let recovered = gateway
+        .reconcile_publication(&mut fixture.state, "admission_1", &gateway_context)
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered["native_result_id"], first_snapshot);
+    assert_eq!(recovered["manifest_digest"], fixture.expected.digest);
+    assert_eq!(
+        fs::read_dir(target.join("snapshots")).unwrap().count(),
+        before
+    );
+
+    fixture
+        .state
+        .block_gateway_resource("gateway_resource", 1, 1)
+        .unwrap();
+    let replay_context = GatewayExecutionContext {
+        executable: Path::new("/nonexistent-replay-worker"),
+        target_key_ref: "unavailable",
+        target_password: "",
+        ..gateway_context
+    };
+    assert_eq!(
+        gateway
+            .publish(&mut fixture.state, &first, &source, &replay_context)
+            .unwrap(),
+        recovered
+    );
+    assert_eq!(
+        gateway
+            .reconcile_publication(&mut fixture.state, "admission_1", &replay_context)
+            .unwrap(),
+        Some(recovered.clone())
+    );
+    let mut conflicting = first.clone();
+    conflicting.payload_hash = format!("sha256:{}", "0".repeat(64));
+    assert!(
+        gateway
+            .publish(&mut fixture.state, &conflicting, &source, &replay_context)
+            .is_err()
+    );
+    assert_eq!(
+        fixture
+            .state
+            .get_staging_quota("gateway_scratch", "gateway_resource")
+            .unwrap()
+            .unwrap()
+            .binding
+            .max_bytes,
+        8 * 1024 * 1024
+    );
+
+    let password_file = fixture.root.join("gateway_password");
+    fs::write(&password_file, b"gateway-test-password").unwrap();
+    fs::set_permissions(&password_file, fs::Permissions::from_mode(0o600)).unwrap();
+    let archive = Archive {
+        executable: std::env::var_os("RELIC_TEST_RESTIC")
+            .expect("verified restic is required")
+            .into(),
+        repository: target,
+        password_file,
+        timeout: Duration::from_secs(60),
+    };
+    archive.check().unwrap();
+    let restored = fixture.root.join("gateway_restore");
+    archive.restore(&first_snapshot, &restored).unwrap();
+    assert_eq!(
+        fs::read(restored.join("sources/documents/data.bin")).unwrap(),
+        vec![0x5a; fixture.data_bytes as usize]
+    );
+    assert_eq!(
+        fs::read(restored.join("sources/documents/empty")).unwrap(),
+        b""
+    );
+    assert_eq!(
+        fs::read(restored.join("sources/documents/folder/nested")).unwrap(),
+        b"nested content"
+    );
+}

@@ -135,7 +135,7 @@ fn migration_from_nine_retains_existing_resource() {
     connection.execute("INSERT INTO gateway_admissions(admission_id,resource_id,commit_key,binding,receiver_epoch,fence_generation,request_type,admission_decision) VALUES('old_admission','resource',?1,?2,'1','1','publication','accepted')", rusqlite::params![key,admission]).unwrap();
     connection.execute("INSERT INTO gateway_executions(admission_id,ordinal,resource_id,receiver_epoch,fence_generation,effect_state) VALUES('old_admission',1,'resource','1','1','unknown')", []).unwrap();
     connection
-        .execute_batch("DROP TABLE gateway_layouts; ALTER TABLE gateway_executions DROP COLUMN worker_identity; PRAGMA user_version = 9;")
+        .execute_batch("DROP TABLE gateway_layouts; ALTER TABLE gateway_executions DROP COLUMN worker_identity; ALTER TABLE gateway_executions DROP COLUMN verify_attempts; ALTER TABLE gateway_executions DROP COLUMN verification_worker_identity; PRAGMA user_version = 9;")
         .unwrap();
     drop(connection);
     let store = StateStore::open(&path).unwrap();

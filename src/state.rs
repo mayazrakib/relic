@@ -14,7 +14,7 @@ use crate::staging_quota::{
 };
 
 const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
-const CURRENT_SCHEMA_VERSION: u32 = 10;
+const CURRENT_SCHEMA_VERSION: u32 = 11;
 
 #[derive(Debug)]
 pub enum StateError {
@@ -581,6 +581,12 @@ impl StateStore {
         if version <= 9 {
             transaction.execute_batch(include_str!(
                 "../database/migrations/00010_gateway_layout.sql"
+            ))?;
+        }
+
+        if version <= 10 {
+            transaction.execute_batch(include_str!(
+                "../database/migrations/00011_gateway_budgets.sql"
             ))?;
         }
 
@@ -2160,7 +2166,7 @@ impl StateStore {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let missing: bool = transaction.query_row(
-            "SELECT EXISTS(SELECT 1 FROM manifest_artifacts m WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'manifest' AND q.object_id = m.artifact_id AND q.storage_endpoint_id = m.storage_endpoint_id AND q.storage_identity = m.storage_identity)) OR EXISTS(SELECT 1 FROM payload_artifacts p WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'payload' AND q.object_id = p.artifact_id AND q.storage_endpoint_id = p.storage_endpoint_id AND q.storage_identity = p.storage_identity)) OR EXISTS(SELECT 1 FROM archive_stages a WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'archive_stage' AND q.object_id = a.stage_id AND q.storage_endpoint_id = a.storage_endpoint_id AND q.storage_identity = a.storage_identity)) OR EXISTS(SELECT 1 FROM native_runs n WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'native_run' AND q.object_id = n.run_id AND q.storage_endpoint_id = n.storage_endpoint_id AND q.storage_identity = n.storage_identity))",
+            "SELECT EXISTS(SELECT 1 FROM manifest_artifacts m WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'manifest' AND q.object_id = m.artifact_id AND q.storage_endpoint_id = m.storage_endpoint_id AND q.storage_identity = m.storage_identity)) OR EXISTS(SELECT 1 FROM payload_artifacts p WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'payload' AND q.object_id = p.artifact_id AND q.storage_endpoint_id = p.storage_endpoint_id AND q.storage_identity = p.storage_identity)) OR EXISTS(SELECT 1 FROM archive_stages a WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'archive_stage' AND q.object_id = a.stage_id AND q.storage_endpoint_id = a.storage_endpoint_id AND q.storage_identity = a.storage_identity)) OR EXISTS(SELECT 1 FROM native_runs n WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'native_run' AND q.object_id = n.run_id AND q.storage_endpoint_id = n.storage_endpoint_id AND q.storage_identity = n.storage_identity)) OR EXISTS(SELECT 1 FROM gateway_layouts l JOIN gateway_resources r ON r.resource_id = l.resource_id WHERE l.scratch_identity IS NOT NULL AND NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'gateway_scratch' AND q.object_id = l.resource_id AND q.storage_endpoint_id = json_extract(r.binding, '$.storage_endpoint_id') AND q.storage_identity = l.scratch_identity AND q.max_bytes = 8388608))",
             [], |row| row.get(0),
         )?;
         if missing {
@@ -2633,7 +2639,7 @@ fn read_native_run(
 fn valid_staging_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "manifest" | "payload" | "archive_stage" | "native_run"
+        "manifest" | "payload" | "archive_stage" | "native_run" | "gateway_scratch"
     )
 }
 
@@ -2643,6 +2649,7 @@ fn validate_staging_quota(binding: &StagingQuotaBinding) -> Result<(), StateErro
         || !valid_identifier_text(&binding.storage_endpoint_id)
         || binding.max_bytes == 0
         || binding.max_bytes > i64::MAX as u64
+        || (binding.object_kind == "gateway_scratch" && binding.max_bytes != 8 * 1024 * 1024)
         || (matches!(binding.object_kind.as_str(), "archive_stage" | "native_run")
             && !valid_archive_id(&binding.object_id))
     {
@@ -2681,6 +2688,9 @@ fn get_staging_owner(
         "native_run" => {
             "SELECT storage_endpoint_id, storage_identity FROM native_runs WHERE run_id = ?1"
         }
+        "gateway_scratch" => {
+            "SELECT json_extract(r.binding, '$.storage_endpoint_id'), l.scratch_identity FROM gateway_resources r JOIN gateway_layouts l ON l.resource_id = r.resource_id WHERE r.resource_id = ?1 AND l.scratch_identity IS NOT NULL"
+        }
         _ => return Err(StateError::InvalidInput),
     };
     connection
@@ -2701,7 +2711,7 @@ fn get_staging_persisted_bytes(
         "archive_stage" => {
             "SELECT catalog_ciphertext_bytes FROM archive_stages WHERE stage_id = ?1"
         }
-        "native_run" => return Ok(0),
+        "native_run" | "gateway_scratch" => return Ok(0),
         _ => return Err(StateError::InvalidInput),
     };
     let value: Option<String> = connection.query_row(query, [id], |row| row.get(0))?;

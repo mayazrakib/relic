@@ -706,6 +706,52 @@ mod linux {
         )
         .map_err(|_| Error::VERIFICATION)?;
         let existing = get_snapshot_candidate(&before, &admission, &execution)?;
+        if !can_write && existing.is_none() {
+            if execution.native_result_id.is_some() {
+                // A previously reported snapshot disappearing is corruption, not safe absence.
+                return Err(Error::VERIFICATION);
+            }
+            let repository_bytes = sync_repository(root, request.repository_max_bytes, &guard)?;
+            check_lock_slot(root, c".relic-owner.lock", owner)?;
+            root.revalidate().map_err(|_| Error::STATE)?;
+            scratch.revalidate().map_err(|_| Error::STATE)?;
+            if state
+                .get_gateway_resource(&request.resource_id)
+                .map_err(|_| Error::STATE)?
+                .as_ref()
+                != Some(resource)
+                || state
+                    .get_gateway_admission(id)
+                    .map_err(|_| Error::STATE)?
+                    .as_ref()
+                    != Some(&admission)
+                || state
+                    .list_gateway_executions(id)
+                    .map_err(|_| Error::STATE)?
+                    .into_iter()
+                    .find(|row| row.ordinal == ordinal)
+                    .as_ref()
+                    != Some(&execution)
+            {
+                return Err(Error::STATE);
+            }
+            guard.check().map_err(|_| Error::RESOURCE)?;
+            return Ok(GatewayWorkerReport {
+                protocol_version: 1,
+                resource_id: request.resource_id.clone(),
+                admission_id: Some(id.into()),
+                execution_ordinal: Some(ordinal),
+                receiver_epoch: execution.receiver_epoch,
+                fence_generation: execution.fence_generation,
+                repository_id,
+                native_snapshot_id: None,
+                manifest_digest: None,
+                entry_count: 0,
+                file_count: 0,
+                payload_bytes: 0,
+                repository_bytes,
+            });
+        }
         let before_ids: BTreeSet<String> = before
             .iter()
             .map(|snapshot| snapshot.id.to_hex().to_string())
@@ -1136,6 +1182,14 @@ mod linux {
                 if request.operation == Operation::COPY {
                     crate::worker_runtime::verify_current_worker_identity(
                         execution.worker_identity.as_ref().ok_or(Error::STATE)?,
+                    )
+                    .map_err(|_| Error::ENVELOPE)?;
+                } else {
+                    crate::worker_runtime::verify_current_worker_identity(
+                        execution
+                            .verification_worker_identity
+                            .as_ref()
+                            .ok_or(Error::STATE)?,
                     )
                     .map_err(|_| Error::ENVELOPE)?;
                 }

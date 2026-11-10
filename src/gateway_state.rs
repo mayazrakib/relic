@@ -54,6 +54,8 @@ pub struct GatewayExecutionRecord {
     pub effect_state: String,
     pub native_result_id: Option<String>,
     pub worker_identity: Option<crate::worker_identity::WorkerIdentity>,
+    pub verify_attempts: u32,
+    pub verification_worker_identity: Option<crate::worker_identity::WorkerIdentity>,
 }
 fn is_identifier(value: &str) -> bool {
     valid_identifier_text(value)
@@ -130,10 +132,21 @@ fn read_execution(
         String,
         Option<String>,
         Option<String>,
+        u32,
+        Option<String>,
     );
-    let row: Option<ExecutionRow> = connection.query_row("SELECT resource_id,receiver_epoch,fence_generation,effect_state,native_result_id,worker_identity FROM gateway_executions WHERE admission_id=?1 AND ordinal=?2", params![id,ordinal], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).optional()?;
+    let row: Option<ExecutionRow> = connection.query_row("SELECT resource_id,receiver_epoch,fence_generation,effect_state,native_result_id,worker_identity,verify_attempts,verification_worker_identity FROM gateway_executions WHERE admission_id=?1 AND ordinal=?2", params![id,ordinal], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?))).optional()?;
     row.map(
-        |(resource_id, epoch, fence, effect_state, native_result_id, worker_identity)| {
+        |(
+            resource_id,
+            epoch,
+            fence,
+            effect_state,
+            native_result_id,
+            worker_identity,
+            verify_attempts,
+            verification_worker_identity,
+        )| {
             Ok(GatewayExecutionRecord {
                 admission_id: id.into(),
                 ordinal,
@@ -142,6 +155,11 @@ fn read_execution(
                 fence_generation: parse_counter(&fence)?,
                 effect_state,
                 native_result_id,
+                verify_attempts,
+                verification_worker_identity: verification_worker_identity
+                    .as_deref()
+                    .map(serde_json::from_str)
+                    .transpose()?,
                 worker_identity: worker_identity
                     .as_deref()
                     .map(serde_json::from_str)
@@ -470,6 +488,83 @@ impl StateStore {
             }
         } else {
             tx.execute("UPDATE gateway_executions SET worker_identity=?1 WHERE admission_id=?2 AND ordinal=?3",params![encoded,id,ordinal])?;
+        }
+        let result = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
+    /// Charge a recovery verification before starting its worker; attempts survive crashes.
+    /// The caller must prove prior copy and verifier scopes are quiescent before incrementing.
+    pub fn start_gateway_verification(
+        &mut self,
+        id: &str,
+        ordinal: u32,
+        epoch: u64,
+        fence: u64,
+    ) -> Result<GatewayExecutionRecord, StateError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let execution = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
+        let resource =
+            read_resource(&tx, &execution.resource_id)?.ok_or(StateError::EffectConflict)?;
+        check_epoch(&resource, epoch, fence)?;
+        if execution.receiver_epoch != epoch
+            || execution.fence_generation != fence
+            || !matches!(resource.effect_state.as_str(), "ready" | "blocked")
+            || !matches!(
+                execution.effect_state.as_str(),
+                "unknown" | "published_unverified"
+            )
+            || execution.verify_attempts >= 3
+        {
+            return Err(StateError::EffectConflict);
+        }
+        tx.execute("UPDATE gateway_executions SET verify_attempts=verify_attempts+1,verification_worker_identity=NULL WHERE admission_id=?1 AND ordinal=?2", params![id, ordinal])?;
+        let result = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
+    /// Bind the current verifier's kernel scope before its process may fork.
+    pub fn bind_gateway_verification_worker(
+        &mut self,
+        id: &str,
+        ordinal: u32,
+        epoch: u64,
+        fence: u64,
+        attempt: u32,
+        identity: &crate::worker_identity::WorkerIdentity,
+    ) -> Result<GatewayExecutionRecord, StateError> {
+        let encoded = serde_json::to_string(identity)?;
+        if encoded.len() > 16384 || attempt == 0 {
+            return Err(StateError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let execution = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
+        let resource =
+            read_resource(&tx, &execution.resource_id)?.ok_or(StateError::EffectConflict)?;
+        check_epoch(&resource, epoch, fence)?;
+        if execution.receiver_epoch != epoch
+            || execution.fence_generation != fence
+            || !matches!(resource.effect_state.as_str(), "ready" | "blocked")
+            || !matches!(
+                execution.effect_state.as_str(),
+                "unknown" | "published_unverified"
+            )
+            || execution.verify_attempts != attempt
+        {
+            return Err(StateError::EffectConflict);
+        }
+        if let Some(previous) = &execution.verification_worker_identity {
+            if previous != identity {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else {
+            tx.execute("UPDATE gateway_executions SET verification_worker_identity=?1 WHERE admission_id=?2 AND ordinal=?3", params![encoded, id, ordinal])?;
         }
         let result = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
         tx.commit()?;
