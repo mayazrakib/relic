@@ -120,10 +120,10 @@ mod unix {
     use super::{LocalEndpoint, ManifestSink, ManifestSpool, ScanError, ScanLimits, StageGuard};
     use crate::manifest::ManifestEntry;
 
-    struct Directory(*mut libc::DIR);
+    pub(crate) struct Directory(*mut libc::DIR);
 
     impl Directory {
-        fn open(file: File) -> Result<Self, ScanError> {
+        pub(crate) fn open(file: File) -> Result<Self, ScanError> {
             let fd = file.into_raw_fd();
             // SAFETY: fd is owned and valid; fdopendir takes ownership only on success.
             let directory = unsafe { libc::fdopendir(fd) };
@@ -137,12 +137,12 @@ mod unix {
             Ok(Self(directory))
         }
 
-        fn fd(&self) -> RawFd {
+        pub(crate) fn fd(&self) -> RawFd {
             // SAFETY: the directory stream remains open for self's lifetime.
             unsafe { libc::dirfd(self.0) }
         }
 
-        fn next(&mut self) -> Result<Option<Vec<u8>>, ScanError> {
+        pub(crate) fn next(&mut self) -> Result<Option<Vec<u8>>, ScanError> {
             // SAFETY: errno points to this thread's errno storage.
             unsafe {
                 *errno_pointer() = 0;
@@ -186,7 +186,7 @@ mod unix {
         unsafe { libc::__error() }
     }
 
-    fn get_stat(fd: RawFd) -> Result<libc::stat, ScanError> {
+    pub(crate) fn get_stat(fd: RawFd) -> Result<libc::stat, ScanError> {
         let mut stat = MaybeUninit::<libc::stat>::uninit();
         // SAFETY: stat points to writable memory and fd is a live descriptor.
         if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } != 0 {
@@ -196,7 +196,7 @@ mod unix {
         Ok(unsafe { stat.assume_init() })
     }
 
-    fn get_entry_stat(fd: RawFd, name: &CStr) -> Result<libc::stat, ScanError> {
+    pub(crate) fn get_entry_stat(fd: RawFd, name: &CStr) -> Result<libc::stat, ScanError> {
         let mut stat = MaybeUninit::<libc::stat>::uninit();
         // SAFETY: name and stat are valid, and AT_SYMLINK_NOFOLLOW prevents following the entry.
         if unsafe {
@@ -214,7 +214,7 @@ mod unix {
         Ok(unsafe { stat.assume_init() })
     }
 
-    fn matches_stat(first: &libc::stat, second: &libc::stat) -> bool {
+    pub(crate) fn matches_stat(first: &libc::stat, second: &libc::stat) -> bool {
         first.st_dev == second.st_dev
             && first.st_ino == second.st_ino
             && first.st_mode == second.st_mode
@@ -225,7 +225,7 @@ mod unix {
             && first.st_ctime_nsec == second.st_ctime_nsec
     }
 
-    fn open_at(fd: RawFd, name: &CStr, is_directory: bool) -> Result<File, ScanError> {
+    pub(crate) fn open_at(fd: RawFd, name: &CStr, is_directory: bool) -> Result<File, ScanError> {
         let mut flags = libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC;
 
         #[cfg(target_os = "linux")]
@@ -246,7 +246,7 @@ mod unix {
         Ok(unsafe { File::from_raw_fd(opened) })
     }
 
-    fn open_file_for_reading(file: File) -> Result<File, ScanError> {
+    pub(crate) fn open_file_for_reading(file: File) -> Result<File, ScanError> {
         let before = get_stat(file.as_raw_fd())?;
 
         if before.st_mode & libc::S_IFMT != libc::S_IFREG {
@@ -555,6 +555,11 @@ mod unix {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use unix::{scan_source, scan_source_pinned};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use unix::{
+    Directory, get_entry_stat, get_stat, matches_stat, open_at, open_file_for_reading,
+};
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn scan_source(

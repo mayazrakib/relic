@@ -154,6 +154,32 @@ pub struct PayloadArtifactSeal {
     pub payload_bytes: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestoreBinding {
+    pub restore_id: String,
+    pub capture_id: String,
+    pub payload_artifact_id: String,
+    pub target_endpoint_id: String,
+    pub target_identity: String,
+    pub relative_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RestoreRecord {
+    pub binding: RestoreBinding,
+    pub effect_state: String,
+    pub manifest_digest: String,
+    pub payload_ciphertext_digest: String,
+    pub manifest_entry_count: String,
+    pub file_count: String,
+    pub payload_bytes: String,
+    pub staging_identity: Option<String>,
+}
+
+type RestoreSnapshot = (String, String, String, String, String);
+type RestorePrior = (String, String, String, String, String, String);
+
 type PublicationRow = (String, String, String, Option<String>, Option<String>);
 type ArtifactSealRow = (
     String,
@@ -351,7 +377,7 @@ impl StateStore {
         let version: u32 =
             transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
-        if version > 4 {
+        if version > 5 {
             return Err(StateError::UnsupportedVersion);
         }
         if version == 0 {
@@ -369,6 +395,11 @@ impl StateStore {
         if version <= 3 {
             transaction.execute_batch(include_str!(
                 "../database/migrations/00004_payload_artifacts.sql"
+            ))?;
+        }
+        if version <= 4 {
+            transaction.execute_batch(include_str!(
+                "../database/migrations/00005_restore_intents.sql"
             ))?;
         }
 
@@ -1024,6 +1055,171 @@ impl StateStore {
             .ok_or(StateError::EffectConflict)
     }
 
+    pub fn prepare_restore(
+        &mut self,
+        binding: &RestoreBinding,
+    ) -> Result<RestoreRecord, StateError> {
+        validate_restore_binding(binding)?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior: Option<RestorePrior> = transaction.query_row("SELECT capture_id, payload_artifact_id, target_endpoint_id, target_identity, relative_name, effect_state FROM restore_intents WHERE restore_id = ?1", [&binding.restore_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))).optional()?;
+        if let Some((capture, payload, endpoint, identity, name, state)) = prior {
+            if capture != binding.capture_id
+                || payload != binding.payload_artifact_id
+                || endpoint != binding.target_endpoint_id
+                || identity != binding.target_identity
+                || name != binding.relative_name
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+            if state == "abandoned" {
+                return Err(StateError::EffectConflict);
+            }
+        } else {
+            let reserved: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM restore_intents WHERE (target_endpoint_id = ?1 OR target_identity = ?2) AND relative_name = ?3 AND effect_state IN ('prepared', 'staging', 'verified', 'published'))", params![binding.target_endpoint_id, binding.target_identity, binding.relative_name], |row| row.get(0))?;
+            if reserved {
+                return Err(StateError::EffectConflict);
+            }
+            let snapshot: Option<RestoreSnapshot> = transaction.query_row("SELECT p.manifest_digest, p.ciphertext_digest, p.manifest_entry_count, p.file_count, p.payload_bytes FROM captures c JOIN payload_artifacts p ON p.artifact_id = c.payload_artifact_id AND p.capture_id = c.capture_id JOIN manifest_artifacts m ON m.artifact_id = c.manifest_artifact_id AND m.capture_id = c.capture_id WHERE c.capture_id = ?1 AND p.artifact_id = ?2 AND p.effect_state = 'sealed' AND m.effect_state = 'sealed' AND c.manifest_digest = p.manifest_digest AND c.manifest_digest = m.manifest_digest AND c.manifest_entry_count = p.manifest_entry_count AND c.manifest_entry_count = m.manifest_entry_count", params![binding.capture_id, binding.payload_artifact_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))).optional()?;
+            let (digest, cipher, count, files, bytes) =
+                snapshot.ok_or(StateError::EffectConflict)?;
+            transaction.execute("INSERT INTO restore_intents (restore_id, capture_id, payload_artifact_id, target_endpoint_id, target_identity, relative_name, effect_state, manifest_digest, payload_ciphertext_digest, manifest_entry_count, file_count, payload_bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'prepared', ?7, ?8, ?9, ?10, ?11)", params![binding.restore_id, binding.capture_id, binding.payload_artifact_id, binding.target_endpoint_id, binding.target_identity, binding.relative_name, digest, cipher, count, files, bytes])?;
+        }
+        transaction.commit()?;
+        self.get_restore(&binding.restore_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn get_restore(&self, restore_id: &str) -> Result<Option<RestoreRecord>, StateError> {
+        if !valid_restore_id(restore_id) {
+            return Err(StateError::InvalidInput);
+        }
+        self.connection.query_row("SELECT restore_id, capture_id, payload_artifact_id, target_endpoint_id, target_identity, relative_name, effect_state, manifest_digest, payload_ciphertext_digest, manifest_entry_count, file_count, payload_bytes, staging_identity FROM restore_intents WHERE restore_id = ?1", [restore_id], |row| Ok(RestoreRecord { binding: RestoreBinding { restore_id: row.get(0)?, capture_id: row.get(1)?, payload_artifact_id: row.get(2)?, target_endpoint_id: row.get(3)?, target_identity: row.get(4)?, relative_name: row.get(5)? }, effect_state: row.get(6)?, manifest_digest: row.get(7)?, payload_ciphertext_digest: row.get(8)?, manifest_entry_count: row.get(9)?, file_count: row.get(10)?, payload_bytes: row.get(11)?, staging_identity: row.get(12)? })).optional().map_err(StateError::from)
+    }
+
+    pub fn list_pending_restores(
+        &self,
+        after_restore_id: &str,
+        limit: u32,
+    ) -> Result<Vec<RestoreRecord>, StateError> {
+        if !(1..=1000).contains(&limit) || after_restore_id.len() > 128 {
+            return Err(StateError::InvalidInput);
+        }
+        let mut statement = self.connection.prepare("SELECT restore_id FROM restore_intents WHERE effect_state IN ('prepared', 'staging', 'verified') AND restore_id > ?1 ORDER BY restore_id LIMIT ?2")?;
+        let rows = statement.query_map(params![after_restore_id, limit], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(self.get_restore(&row?)?.ok_or(StateError::EffectConflict)?);
+        }
+        Ok(records)
+    }
+
+    pub fn mark_restore_staging(
+        &mut self,
+        restore_id: &str,
+        identity: &str,
+    ) -> Result<RestoreRecord, StateError> {
+        if !valid_restore_id(restore_id) || !valid_identifier_text(identity) {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior: Option<(String, Option<String>)> = transaction
+            .query_row(
+                "SELECT effect_state, staging_identity FROM restore_intents WHERE restore_id = ?1",
+                [restore_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let (state, existing) = prior.ok_or(StateError::EffectConflict)?;
+        match state.as_str() {
+            "prepared" => {
+                transaction.execute("UPDATE restore_intents SET effect_state = 'staging', staging_identity = ?1, system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE restore_id = ?2", params![identity, restore_id])?;
+            }
+            "staging" if existing.as_deref() == Some(identity) => {}
+            "staging" => return Err(StateError::IdempotencyConflict),
+            _ => return Err(StateError::EffectConflict),
+        }
+        transaction.commit()?;
+        self.get_restore(restore_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn mark_restore_verified(&mut self, restore_id: &str) -> Result<RestoreRecord, StateError> {
+        if !valid_restore_id(restore_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let state: Option<String> = transaction
+            .query_row(
+                "SELECT effect_state FROM restore_intents WHERE restore_id = ?1",
+                [restore_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match state.as_deref() {
+            Some("staging") => {
+                transaction.execute("UPDATE restore_intents SET effect_state = 'verified', system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE restore_id = ?1", [restore_id])?;
+            }
+            Some("verified") => {}
+            _ => return Err(StateError::EffectConflict),
+        }
+        transaction.commit()?;
+        self.get_restore(restore_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn mark_restore_published(
+        &mut self,
+        restore_id: &str,
+        identity: &str,
+    ) -> Result<RestoreRecord, StateError> {
+        if !valid_restore_id(restore_id) || !valid_identifier_text(identity) {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior: Option<(String, Option<String>)> = transaction
+            .query_row(
+                "SELECT effect_state, staging_identity FROM restore_intents WHERE restore_id = ?1",
+                [restore_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let (state, existing) = prior.ok_or(StateError::EffectConflict)?;
+        if !matches!(state.as_str(), "verified" | "published") {
+            return Err(StateError::EffectConflict);
+        }
+        if existing.as_deref() != Some(identity) {
+            return Err(StateError::IdempotencyConflict);
+        }
+        if state == "verified" {
+            transaction.execute("UPDATE restore_intents SET effect_state = 'published', system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE restore_id = ?1", [restore_id])?;
+        }
+        transaction.commit()?;
+        self.get_restore(restore_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn abandon_restore(&mut self, restore_id: &str) -> Result<RestoreRecord, StateError> {
+        if !valid_restore_id(restore_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let changed = self.connection.execute("UPDATE restore_intents SET effect_state = 'abandoned', system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE restore_id = ?1 AND effect_state IN ('prepared', 'staging')", [restore_id])?;
+        if changed != 1 {
+            return Err(StateError::EffectConflict);
+        }
+        self.get_restore(restore_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
     pub fn bind_publication(&mut self, binding: &Value) -> Result<PublicationRecord, StateError> {
         validate_publication_binding(binding)?;
         let key = binding.get("commit_key").ok_or(StateError::InvalidInput)?;
@@ -1366,6 +1562,31 @@ fn validate_payload_binding(binding: &PayloadArtifactBinding) -> Result<(), Stat
         || binding.artifact_id.contains(':')
         || binding.relative_name.len() > 143
         || binding.relative_name != format!("payload_{}.sealed", binding.artifact_id)
+    {
+        return Err(StateError::InvalidInput);
+    }
+    Ok(())
+}
+
+fn valid_restore_id(value: &str) -> bool {
+    valid_identifier_text(value) && !value.contains(':')
+}
+
+fn validate_restore_binding(binding: &RestoreBinding) -> Result<(), StateError> {
+    let name = &binding.relative_name;
+    if !valid_restore_id(&binding.restore_id)
+        || !valid_identifier_text(&binding.capture_id)
+        || !valid_restore_id(&binding.payload_artifact_id)
+        || !valid_identifier_text(&binding.target_endpoint_id)
+        || !valid_identifier_text(&binding.target_identity)
+        || name.is_empty()
+        || name.len() > 255
+        || name == "."
+        || name == ".."
+        || name.starts_with(".restore_")
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
     {
         return Err(StateError::InvalidInput);
     }

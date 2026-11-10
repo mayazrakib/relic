@@ -48,7 +48,7 @@ mod unix {
     use super::{RestoreError, RestoreName};
 
     const BUFFER_BYTES: usize = 64 * 1024;
-    const MAX_DIRECTORY_DEPTH: usize = 32;
+    const MAX_DIRECTORY_DEPTH: usize = 129;
 
     pub fn open_restore_directory(
         root: &File,

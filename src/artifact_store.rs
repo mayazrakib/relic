@@ -72,7 +72,9 @@ mod unix {
     use crate::encrypted_spool::SpoolLimits;
     use crate::local_endpoint::LocalEndpoint;
     use crate::manifest_artifact::ManifestArtifact;
-    use crate::payload_capture::{PayloadLimits, verify_payload};
+    use crate::payload_capture::{
+        DiscardPayload, PayloadLimits, PayloadVisitor, verify_payload_with_visitor,
+    };
     use crate::resources::StageGuard;
     use crate::state::{
         ManifestArtifactBinding, ManifestArtifactRecord, PayloadArtifactBinding,
@@ -697,6 +699,7 @@ mod unix {
             file: &mut File,
             verification: &mut PayloadVerification<'_>,
             guard: &StageGuard,
+            visitor: &mut dyn PayloadVisitor,
         ) -> Result<PayloadArtifactSeal, ArtifactStoreError> {
             check_limits(verification.limits.spool)?;
             let capture = state
@@ -738,7 +741,7 @@ mod unix {
                 verification.limits.spool.ciphertext_bytes,
                 guard,
                 |reader| {
-                    verify_payload(
+                    verify_payload_with_visitor(
                         reader,
                         &capture.binding,
                         verification.key,
@@ -746,6 +749,7 @@ mod unix {
                         guard,
                         verification.sorter,
                         &expected,
+                        visitor,
                     )
                     .map_err(ArtifactStoreError::PAYLOAD)
                 },
@@ -817,6 +821,7 @@ mod unix {
                 &mut stage.file,
                 verification,
                 &stage.guard,
+                &mut DiscardPayload,
             )?;
             stage.guard.check().map_err(ArtifactStoreError::RESOURCE)?;
             self.publish_file(&stage.binding, &stage.file, ArtifactKind::PAYLOAD)?;
@@ -871,7 +876,14 @@ mod unix {
                 &pending
             };
             let mut file = self.open_file(name, libc::O_RDONLY)?;
-            let seal = self.verify_payload_file(state, &record, &mut file, verification, guard)?;
+            let seal = self.verify_payload_file(
+                state,
+                &record,
+                &mut file,
+                verification,
+                guard,
+                &mut DiscardPayload,
+            )?;
             file.sync_all()?;
             guard.check().map_err(ArtifactStoreError::RESOURCE)?;
 
@@ -885,6 +897,44 @@ mod unix {
             state
                 .seal_payload_artifact(artifact_id, &seal)
                 .map_err(|_| ArtifactStoreError::OUTCOME_UNKNOWN)
+        }
+
+        /// Consumer writes remain provisional until this method succeeds. The
+        /// lease excludes storage mutation and never exposes a raw file handle.
+        pub fn visit_sealed_payload(
+            &self,
+            state: &StateStore,
+            artifact_id: &str,
+            verification: &mut PayloadVerification<'_>,
+            guard: &StageGuard,
+            visitor: &mut dyn PayloadVisitor,
+        ) -> Result<PayloadArtifactRecord, ArtifactStoreError> {
+            let record = state
+                .get_payload_artifact(artifact_id)?
+                .ok_or(ArtifactStoreError::INVALID)?;
+            let location = get_payload_location(&record.binding);
+            self.check_binding(&location, ArtifactKind::PAYLOAD)?;
+
+            if verification.key_ref != record.binding.key_ref {
+                return Err(ArtifactStoreError::WRONG_KEY_REFERENCE);
+            }
+
+            let _lock =
+                self.acquire_lock(&record.binding.capture_id, ArtifactKind::PAYLOAD, guard)?;
+            let record = state
+                .get_payload_artifact(artifact_id)?
+                .ok_or(ArtifactStoreError::INVALID)?;
+
+            if record.effect_state != "sealed" {
+                return Err(ArtifactStoreError::RECONCILIATION_REQUIRED);
+            }
+
+            let mut file = self.open_file(&location.relative_name, libc::O_RDONLY)?;
+            self.verify_payload_file(state, &record, &mut file, verification, guard, visitor)?;
+            self.check_binding(&location, ArtifactKind::PAYLOAD)?;
+            guard.check().map_err(ArtifactStoreError::RESOURCE)?;
+
+            Ok(record)
         }
 
         pub fn reconcile(

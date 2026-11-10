@@ -596,9 +596,32 @@ pub fn visit_payload<R: Read, V: PayloadVisitor>(
     }
 }
 
-struct ManifestVisitor<'a>(&'a mut EncryptedManifestSort);
+struct ManifestVisitor<'a, V: PayloadVisitor + ?Sized> {
+    sorter: &'a mut EncryptedManifestSort,
+    visitor: &'a mut V,
+}
 
-impl PayloadVisitor for ManifestVisitor<'_> {
+impl<V: PayloadVisitor + ?Sized> PayloadVisitor for ManifestVisitor<'_, V> {
+    fn begin_file(&mut self, file: &PayloadFile) -> Result<(), PayloadError> {
+        self.visitor.begin_file(file)
+    }
+
+    fn write_file_chunk(&mut self, bytes: &[u8]) -> Result<(), PayloadError> {
+        self.visitor.write_file_chunk(bytes)
+    }
+
+    fn finish_entry(&mut self, entry: &ManifestEntry) -> Result<(), PayloadError> {
+        self.sorter
+            .add_entry(entry)
+            .map_err(|_| PayloadError::SINK)?;
+
+        self.visitor.finish_entry(entry)
+    }
+}
+
+pub(crate) struct DiscardPayload;
+
+impl PayloadVisitor for DiscardPayload {
     fn begin_file(&mut self, _file: &PayloadFile) -> Result<(), PayloadError> {
         Ok(())
     }
@@ -607,8 +630,8 @@ impl PayloadVisitor for ManifestVisitor<'_> {
         Ok(())
     }
 
-    fn finish_entry(&mut self, entry: &ManifestEntry) -> Result<(), PayloadError> {
-        self.0.add_entry(entry).map_err(|_| PayloadError::SINK)
+    fn finish_entry(&mut self, _entry: &ManifestEntry) -> Result<(), PayloadError> {
+        Ok(())
     }
 }
 
@@ -623,13 +646,36 @@ pub fn verify_payload<R: Read>(
     sorter: &mut EncryptedManifestSort,
     expected: &ManifestArtifact,
 ) -> Result<PayloadSummary, PayloadError> {
+    verify_payload_with_visitor(
+        source,
+        binding,
+        key,
+        limits,
+        guard,
+        sorter,
+        expected,
+        &mut DiscardPayload,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn verify_payload_with_visitor<R: Read, V: PayloadVisitor + ?Sized>(
+    source: R,
+    binding: &CaptureBinding,
+    key: &Zeroizing<[u8; 32]>,
+    limits: PayloadLimits,
+    guard: &StageGuard,
+    sorter: &mut EncryptedManifestSort,
+    expected: &ManifestArtifact,
+    visitor: &mut V,
+) -> Result<PayloadSummary, PayloadError> {
     let summary = visit_payload(
         source,
         binding,
         key,
         limits,
         guard,
-        &mut ManifestVisitor(sorter),
+        &mut ManifestVisitor { sorter, visitor },
     )?;
 
     if summary.entry_count != expected.entry_count {

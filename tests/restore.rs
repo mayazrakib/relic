@@ -68,7 +68,7 @@ fn traverses_and_creates_only_bounded_directories() {
         0o700
     );
     assert!(open_restore_directory(&root, &components, false, || false).is_ok());
-    let excessive: Vec<RestoreName> = (0..33).map(|_| RestoreName::new(b"x").unwrap()).collect();
+    let excessive: Vec<RestoreName> = (0..130).map(|_| RestoreName::new(b"x").unwrap()).collect();
     assert!(matches!(
         open_restore_directory(&root, &excessive, true, || false),
         Err(RestoreError::DEPTH_EXCEEDED)

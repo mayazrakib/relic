@@ -16,6 +16,7 @@ pub mod payload_capture;
 pub mod planner;
 pub mod resources;
 pub mod restore;
+pub mod restore_store;
 pub mod scheduler;
 pub mod service;
 pub mod source_scan;
