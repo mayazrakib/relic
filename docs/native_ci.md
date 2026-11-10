@@ -43,3 +43,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 11. Private Restore Milestone
 
 [Run 42821843753](https://github.com/mayazrakib/relic/actions/runs/42821843753) passed on all three selected targets for `03bc486`. Linux and macOS execute the private restore and no-overwrite publication fixtures; Windows executes portable state and migration tests while filesystem restore remains unavailable. New multipass sorter and endpoint-identifier changes require fresh native execution. These component results do not establish complete archive, restore, or installer acceptance.
+
+## 12. Tiered Ordering Milestone
+
+[Run 42826545847](https://github.com/mayazrakib/relic/actions/runs/42826545847) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `fe63bbd`. Unix jobs execute tiered encrypted ordering and endpoint-identifier fixtures; Windows retains portable contract and journal coverage. The frozen archive source and staged-manifest verification changes require fresh native execution. The external independent recovery fixture is an explicit local check and remains outside default native CI.

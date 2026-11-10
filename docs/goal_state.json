@@ -329,12 +329,12 @@
         "docs/evidence/multipass_sort.json"
     ],
     "blockers": [],
-    "next_action": "Push multipass milestone and observe native CI without restarting. Implement a runtime frozen-capture ReadSource proof and full native staged snapshot-to-logical-manifest verification; SDK success can omit source/read errors. Establish bounded per-file capture locators, worker resource/cancellation containment and sole-credential fenced mutation/publication before enabled archive jobs. Large-source staging and all remaining full-system gates stay required under1GiB/high768MiB/no swap and at most one worker.",
+    "next_action": "Push and observe new archive-capture native CI without blind retries. Implement a one-pass sealed-payload visitor producing owned encrypted per-file staging with bounded lazy opens, aggregate spool/inode reservations, authenticated catalogue admission and crash reconciliation. Final entry digest arrives after bytes: bind provisional stream to capture+PayloadFile header and final entry through verified catalogue/reader EOF. Then isolate engine memory/cancellation and implement sole-credential fenced mutations and durable native receipts before enabled archive jobs. Continue all remaining full-system gates. Preserve README badge edit;1GiB/high768MiB/no swap; one worker maximum.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "3538808c7d3fa9d937b37ae1407ab0c6c742cba2c34fa32800454ab23b978d08",
+    "source_fingerprint": "a8041fa671c8fe583558b9596c3950640c9af52e3d14cf684952695d0c147dd9",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -719,30 +719,48 @@
                 "docs/evidence/multipass_sort.json"
             ],
             "limits": "Static source evidence only; SDK skips errors and cannot establish completeness without independent expected-manifest verification"
+        },
+        {
+            "name": "Restricted encrypted frozen archive ReadSource",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "src/archive_source.rs",
+                "tests/archive_source.rs",
+                "docs/evidence/archive_capture.json"
+            ],
+            "limits": "Restricted portable ASCII files/directories without requested metadata; source ciphertext retained in RAM within8MiB class cap; Durable bounded captured-payload locators and encrypted file staging still pending"
+        },
+        {
+            "name": "Exact staged native snapshot manifest and independent recovery",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "src/archive_manifest.rs",
+                "tests/archive_manifest.rs",
+                "docs/archive_capture.md",
+                "docs/evidence/archive_capture.json"
+            ],
+            "limits": "Native SDK full index/cache/chunk allocations and blocking calls require isolated-worker resource/cancellation qualification; Private staged snapshot verification does not establish destination mutation authority, fenced serialization, native receipts or durable publication; Comparator runtime fixtures are Unix-only pending Windows encrypted manifest ordering; No production archive/S3 jobs, cleanup, key-provider lifecycle, complete metadata or remaining system acceptance qualification"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented tiered bounded encrypted multipass sorting, checked peak/cumulative reservations, strict final authentication and failure poisoning, inode-safe cleanup and opaque endpoint ID compatibility. All143 tests pass, zero ignored; Clippy/formatting pass. Test peak678.4M, Clippy251.9M, zero swap. Prior03bc486 native CI passed all targets. Static audit found SDK skip-on-error and missing local parent fsync; archive execution remains gated pending complete snapshot verification and resource/fencing qualification. Full goal remains active."
+        "result": "Implemented encrypted frozen ReadSource and exact native snapshot-to-manifest verification. All154 tests pass with zero ignored, including independent restic recovery and SDK skip/read-size regressions. Added complete declared-source root coverage after review. Test peak735.1M; warnings-denied Clippy258.3M; zero swap. Native fe63bbd run42826545847 verified success on all three targets. Full goal remains active; enabled archive jobs stay gated pending durable bounded locators, worker containment and fenced publication."
     },
     "remote_checkpoint": {
-        "commit": "03bc486e6111fd0d8d0519a712b53547d750f002",
+        "commit": "fe63bbd983096301a0ae80f16042591faeae4044",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42821843753,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42821843753",
-        "status": "completed_successfully",
-        "push_transport": "existing authorized SSH credential",
-        "results": {
-            "linux-x86_64": "success",
-            "windows-x86_64": "success",
-            "macos-arm64": "success"
-        }
+        "native_ci_run_id": 42826545847,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42826545847",
+        "status": "in_progress_when_observed",
+        "push_transport": "existing authorized SSH credential"
     },
     "prior_native_checkpoint": {
-        "commit": "cba4d767fe1d96ea50dd6205842b594d5d9dd57c",
+        "commit": "fe63bbd983096301a0ae80f16042591faeae4044",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42817839865,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42817839865",
+        "native_ci_run_id": 42826545847,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42826545847",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {

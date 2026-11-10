@@ -1,4 +1,8 @@
 pub mod archive;
+#[cfg(feature = "embedded-archive")]
+pub mod archive_manifest;
+#[cfg(feature = "embedded-archive")]
+pub mod archive_source;
 pub mod artifact_store;
 pub mod config;
 pub mod contracts;
