@@ -12,6 +12,7 @@ pub mod local_endpoint;
 pub mod manifest;
 pub mod manifest_artifact;
 pub mod manifest_spool;
+pub mod payload_capture;
 pub mod planner;
 pub mod resources;
 pub mod restore;

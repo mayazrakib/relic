@@ -27,3 +27,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 7. Pinned Capture Milestone
 
 [Run 42807908209](https://github.com/mayazrakib/relic/actions/runs/42807908209) passed on all three selected native targets for `49ef734`. This covers the pinned source, encrypted sorting, manifest verification, and capture freeze integration included in that commit. Subsequent durable artifact ownership and reconciliation changes require a fresh native run. Windows artifact storage, production backup execution, and the remaining full-system acceptance gates are still unfinished.
+
+## 8. Artifact Ownership Milestone
+
+[Run 42813731012](https://github.com/mayazrakib/relic/actions/runs/42813731012) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `8073389`. Unix jobs include the artifact store's process-boundary reconciliation tests; Windows compiles the unavailable-platform implementation and runs the portable journal tests. These results do not establish Windows artifact storage support or power-loss durability. Later source-payload changes require their own native run.

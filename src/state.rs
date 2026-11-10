@@ -1049,7 +1049,7 @@ fn is_digest(value: &Value) -> bool {
     })
 }
 
-fn validate_capture_binding(binding: &CaptureBinding) -> Result<(), StateError> {
+pub(crate) fn validate_capture_binding(binding: &CaptureBinding) -> Result<(), StateError> {
     let ids = [
         &binding.authority_id,
         &binding.job_id,

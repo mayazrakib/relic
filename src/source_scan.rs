@@ -28,6 +28,7 @@ pub enum ScanError {
     IO(std::io::Error),
     SPOOL(SpoolError),
     SORT(SortError),
+    PAYLOAD(crate::payload_capture::PayloadError),
     ENDPOINT,
     RESOURCE(ResourceError),
     UNSUPPORTED_PLATFORM,
@@ -44,6 +45,7 @@ impl fmt::Display for ScanError {
             Self::IO(_) => "source I/O failed",
             Self::SPOOL(_) => "manifest spool failed",
             Self::SORT(_) => "encrypted manifest sort failed",
+            Self::PAYLOAD(_) => "encrypted payload capture failed",
             Self::ENDPOINT => "pinned endpoint changed",
             Self::RESOURCE(_) => "source scan canceled or resource limit reached",
             Self::UNSUPPORTED_PLATFORM => "source scanner is unavailable on this platform",
@@ -73,6 +75,19 @@ impl From<ResourceError> for ScanError {
 
 pub trait ManifestSink {
     fn append_entry(&mut self, entry: &ManifestEntry) -> Result<(), ScanError>;
+
+    fn begin_file(
+        &mut self,
+        _source_id: &str,
+        _path: &[String],
+        _size_bytes: u64,
+    ) -> Result<(), ScanError> {
+        Ok(())
+    }
+
+    fn write_file_chunk(&mut self, _bytes: &[u8]) -> Result<(), ScanError> {
+        Ok(())
+    }
 }
 
 impl ManifestSink for ManifestSpool {
@@ -100,6 +115,7 @@ mod unix {
     use base64::Engine;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use sha2::{Digest, Sha256};
+    use zeroize::Zeroizing;
 
     use super::{LocalEndpoint, ManifestSink, ManifestSpool, ScanError, ScanLimits, StageGuard};
     use crate::manifest::ManifestEntry;
@@ -318,11 +334,12 @@ mod unix {
                 return Err(ScanError::LIMIT_EXCEEDED);
             }
             let mut hasher = Sha256::new();
-            let mut buffer = [0u8; 65_536];
+            let mut buffer = Zeroizing::new([0u8; 65_536]);
             let mut read_bytes = 0u64;
+            self.spool.begin_file(self.source_id, &self.path, size)?;
             loop {
                 self.guard.check()?;
-                let length = file.read(&mut buffer)?;
+                let length = file.read(&mut buffer[..])?;
                 if length == 0 {
                     break;
                 }
@@ -333,6 +350,7 @@ mod unix {
                     return Err(ScanError::CHANGED);
                 }
                 hasher.update(&buffer[..length]);
+                self.spool.write_file_chunk(&buffer[..length])?;
             }
             if read_bytes != size || !matches_stat(before, &get_stat(file.as_raw_fd())?) {
                 return Err(ScanError::CHANGED);

@@ -322,15 +322,16 @@
         "docs/evidence/capture_admission.json",
         "docs/evidence/low_memory.json",
         "docs/evidence/pinned_capture.json",
-        "docs/evidence/artifact_store.json"
+        "docs/evidence/artifact_store.json",
+        "docs/evidence/payload_capture.json"
     ],
     "blockers": [],
-    "next_action": "Push verified artifact lifecycle milestone and observe native CI without restarting. Implement encrypted source-payload preservation and restore with immutable ownership, bounded streaming, cancellation and crash reconciliation. Close archive memory/cancellation/publication qualification before enabled daemon jobs. All full-system phases remain required under 1GiB/high768MiB/no swap and at most one worker.",
+    "next_action": "Push payload capture milestone and observe native CI without restarting. Add durable payload ownership and crash reconciliation with capture/manifest linkage; integrate bounded staged restore and archive adapters. Close archive memory/cancellation/publication qualification before enabled daemon jobs. All full-system phases remain required under 1GiB/high768MiB/no swap and at most one worker.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "af2bf9ef09c52ccac5d01eb37736d2459cd88423789c65f203f21f26776a012b",
+    "source_fingerprint": "c4c4393576df682512aeb60cf04553187671b601a6e0879c108e46740341697e",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -626,17 +627,29 @@
                 "docs/evidence/artifact_store.json"
             ],
             "limits": "Simulated process boundaries only; no power-loss, Windows, payload backup, key-provider lifecycle, retention or distributed fencing qualification"
+        },
+        {
+            "name": "Bounded encrypted source payload and exact manifest verification",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/payload_capture.rs",
+                "tests/payload_capture.rs",
+                "docs/payload_capture.md",
+                "docs/evidence/payload_capture.json"
+            ],
+            "limits": "Internal stream and source-deletion fixture; no durable payload journal, key lifecycle, production restore/archive adapter, Windows scanner or independent archive format recovery qualification"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented durable artifact journal, immutable ownership and Unix crash reconciliation; resource-reserved pinned capture fixture uses owned storage. All102 local tests pass, zero ignored; Clippy and formatting pass. Test peak578.2M and Clippy265.2M, zero swap. Prior49ef734 native CI passed all three targets; new milestone native execution pending. Full-system goal remains active."
+        "result": "Implemented same-read pinned source payload capture with bounded encrypted streaming, checksums, exact logical-manifest verification and provisional-consumer contract. Source-deletion recovery and source-change-abort fixtures pass. All114 tests pass, zero ignored; Clippy and formatting pass. Test peak548.9M and Clippy240.3M, zero swap. Prior8073389 native CI passed all three targets; payload native execution pending. Full-system goal remains active."
     },
     "remote_checkpoint": {
-        "commit": "49ef7343482b8900627797930a5addf0ccf1044d",
+        "commit": "80733895e16787d22837ff976965c890b5c06381",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42807908209,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42807908209",
+        "native_ci_run_id": 42813731012,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42813731012",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -646,10 +659,10 @@
         }
     },
     "prior_native_checkpoint": {
-        "commit": "7a2e98d9aa0389247325ec0ad785e0085a5e5a14",
+        "commit": "49ef7343482b8900627797930a5addf0ccf1044d",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42806104925,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42806104925",
+        "native_ci_run_id": 42807908209,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42807908209",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
