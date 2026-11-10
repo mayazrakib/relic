@@ -1,0 +1,394 @@
+{
+    "schema_version": 1,
+    "recorded_at": "2026-11-10T12:40:28.077354+00:00",
+    "scope": "Unix durable source-payload ownership, authenticated process-boundary recovery and composed pinned capture; no complete backup/restore executor qualification",
+    "source_fingerprint": "7fedfbef8808d55ba3ea612e514d583bf7f5c3967bcadefafe2323ac49b64ad2",
+    "sources": [
+        {
+            "path": ".cargo/config.toml",
+            "sha256": "8b6bb16262ab5ed26a7dfc9ec8077f46cf4f3aa87a662a823449bbbcadb7d8b5"
+        },
+        {
+            "path": ".github/workflows/ci.yml",
+            "sha256": "467bb954775baa11b58b00669c5cd13621aaf5f6a064ab5b3ddbfaa4ec5850ff"
+        },
+        {
+            "path": ".tool-versions",
+            "sha256": "115c61338be28f7a7ef85289a9e934bdcf2dd692a99c9968362da39189d734e3"
+        },
+        {
+            "path": "AGENTS.md",
+            "sha256": "15c6898a41de7e62d4a1167ab104e3e16d32e0634ee6fd1a39373cebfd3d834c"
+        },
+        {
+            "path": "Cargo.lock",
+            "sha256": "aabf753b3579740137877d78a76424df2ab6d16e3696189c06412861ec320aeb"
+        },
+        {
+            "path": "Cargo.toml",
+            "sha256": "859c2543c567934ea76ddd1bc3f3c484665adebf94a023af4fef0f3ee1f6d8ee"
+        },
+        {
+            "path": "LICENSE",
+            "sha256": "42fa9de5da4893c96d89d6a2e21e7d95cc34fe42c7903689b9d3c1bffb9c57e7"
+        },
+        {
+            "path": "SPEC.md",
+            "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
+        },
+        {
+            "path": "Taskfile.yml",
+            "sha256": "8c542e02fb8d6b98ccb4926bae181ed8b2d872419f8eb23e31eee09df466d55d"
+        },
+        {
+            "path": "database/migrations/00001_initialize.sql",
+            "sha256": "c1627cf07a36f2019e5c31ea925b262b58f7ed608974668454c6b4f8a71491e7"
+        },
+        {
+            "path": "database/migrations/00002_capture.sql",
+            "sha256": "42bcf4037b4590cc3e1ecbd0c29f75e560d02e701d4dc371728b1d070a475002"
+        },
+        {
+            "path": "database/migrations/00003_manifest_artifacts.sql",
+            "sha256": "fc039071fd93bfa3613043db767d496c6747a1b4d4f539cd7f6e2a5d0c6d0350"
+        },
+        {
+            "path": "database/migrations/00004_payload_artifacts.sql",
+            "sha256": "f3622e7c2a11863d42766ddd075fa275f76824a503f054ed7ebc0c319249c9fe"
+        },
+        {
+            "path": "fixtures/contracts/checkpoint.json",
+            "sha256": "bee0e2634a9192ab764a1b75f8b0c00556ae915ea0493367077210045e95009c"
+        },
+        {
+            "path": "fixtures/contracts/manifest_entry.json",
+            "sha256": "0cabeeff2d1bf44e935a551d854340b959b0405c15ee28c16d29b901dee6f8ef"
+        },
+        {
+            "path": "fixtures/contracts/manifest_header.json",
+            "sha256": "09abbb62f2a9065f56900493768c3c7a8aacdcd68d0102a7a09ac6d32196f40c"
+        },
+        {
+            "path": "fixtures/contracts/occurrence.json",
+            "sha256": "d94a478d6f86968abdd4c70ed0072d92d91955e19d421eb07916f7adbda955dc"
+        },
+        {
+            "path": "fixtures/contracts/plan_entry.json",
+            "sha256": "9bb3c698255a799ad513dfe069d9443f0636615e7d2651fe5f786bdadd50da2e"
+        },
+        {
+            "path": "fixtures/contracts/plan_header.json",
+            "sha256": "f36898de9042c02e12266101340383dc5797df65519248ef9e9b1513dcad5683"
+        },
+        {
+            "path": "fixtures/contracts/policy.json",
+            "sha256": "4c3d02bd17c96d3dd63ef3216a5badeb637097fe3fe3e650faef23a9d17216ee"
+        },
+        {
+            "path": "fixtures/contracts/publication.json",
+            "sha256": "35df93e04db6cd34cb8a692755622e9775c3b39e0ab2be93ae3c227ace571f50"
+        },
+        {
+            "path": "fixtures/contracts/receipt.json",
+            "sha256": "0bc762646dfd811983c52a498c2c1399c492b2bd9f12ec927aa38bcbf6b79ea4"
+        },
+        {
+            "path": "schemas/job.json",
+            "sha256": "e28f5f3cbba004f5010d6c50d2b20282ddac9098b0bf0374e53699d5fc0fec6a"
+        },
+        {
+            "path": "schemas/records.json",
+            "sha256": "bbde6c64a1bbccf6bab790da3ebd9d0b504cc5aa7af8b8fe551354f6eb9b88c7"
+        },
+        {
+            "path": "schemas/request.json",
+            "sha256": "fa0bbaf92d738cd5dad79672cbc606fd4a5d5b59c217c00d3d3b9a049c7221b4"
+        },
+        {
+            "path": "schemas/response.json",
+            "sha256": "5896e8950996e5885fbb73a7e07bf147d424a6ca5bf5d76311800f356c7c4f56"
+        },
+        {
+            "path": "src/archive.rs",
+            "sha256": "f27fcd96b26f116f09587d9fbe874c00d708189d6ba68d23021718d2d1094a40"
+        },
+        {
+            "path": "src/artifact_store.rs",
+            "sha256": "19632f5c003ebb50f005f753c158dce2eb86f03c6ca8940938fcef49b95eff08"
+        },
+        {
+            "path": "src/bin/relicd.rs",
+            "sha256": "4081cb9afc1ad3884b5f7826c454b0d9e2d47c51917d5185a9568eec62d5e12f"
+        },
+        {
+            "path": "src/config.rs",
+            "sha256": "6b365605caf2befcb841c513c234147d267b74c539eb765587eb8eb28c77f103"
+        },
+        {
+            "path": "src/contracts.rs",
+            "sha256": "baf39a6bd9d27a9c5fc0fc77ce46eeecf880ed877339df330abee130af27b004"
+        },
+        {
+            "path": "src/domain.rs",
+            "sha256": "a9988ac232cada5dee1ce16f71c3d24d6e8c2519b2a67a8c2ee274ae20d7322a"
+        },
+        {
+            "path": "src/embedded_archive.rs",
+            "sha256": "43d1bdc7140691ef37faf80cf45e9776383dafae47ae808fd3dfd3ba197f0c9c"
+        },
+        {
+            "path": "src/encrypted_manifest_sort.rs",
+            "sha256": "c87bf770ec1054adad7d1b76682c79551332bef94df79952c48a756cce8a4ddf"
+        },
+        {
+            "path": "src/encrypted_spool.rs",
+            "sha256": "d124c5a67b8755a6b033f888638af0e9eddb17ebda47f9fb99ba390ce093701a"
+        },
+        {
+            "path": "src/identity.rs",
+            "sha256": "49428b28785e5c0163cda9020f26b7c42c5efb382d4244e98b4f744634b4f496"
+        },
+        {
+            "path": "src/lib.rs",
+            "sha256": "a1a646982b8784a9e202d8c8f69732aca422f9758dfa9929f087fa1a67bd552f"
+        },
+        {
+            "path": "src/local_endpoint.rs",
+            "sha256": "e35508880183b381bdc073ce40ba231a289839835882c83c11fadc2d6cc74a5d"
+        },
+        {
+            "path": "src/main.rs",
+            "sha256": "03cbf2f1c7593b3c716a751eccc5920c8a2a6c1204144c8bf05218470446fe6d"
+        },
+        {
+            "path": "src/manifest.rs",
+            "sha256": "2fe1d131d1c8bbcc271cce728b43c857b3e99d6db15b2a28574e097c65747f0d"
+        },
+        {
+            "path": "src/manifest_artifact.rs",
+            "sha256": "38784e55fda661634b45e7440d6b0605d9df163e518802f57af280282d399cd0"
+        },
+        {
+            "path": "src/manifest_spool.rs",
+            "sha256": "77cbab56f7eecc85b4d34cb1f9b7a95b93c375bf6155ad46c5b2540d509630fd"
+        },
+        {
+            "path": "src/payload_capture.rs",
+            "sha256": "935f9ae9b6446f7f885cd2ccd08b3dc4a0602ad41527fb435fabd283aa8aaea5"
+        },
+        {
+            "path": "src/planner.rs",
+            "sha256": "e8aa8436c02a5606081cde78eddc16d191c3695e09832051f011b4906e43a02e"
+        },
+        {
+            "path": "src/resources.rs",
+            "sha256": "9209cfe1399b5cab3e2d1a8159cc1fd03d5672b4cdd905088dbd09e60cc6547d"
+        },
+        {
+            "path": "src/restore.rs",
+            "sha256": "d8deed0d5161f2cf176ed96137466b90c3bf09b27e75a0f679af5b97857e4799"
+        },
+        {
+            "path": "src/scheduler.rs",
+            "sha256": "7d74dce3a0d135cd180272ff23c8756ef92b9d2dfc8008cebdc7eb2212e998bb"
+        },
+        {
+            "path": "src/service.rs",
+            "sha256": "e1ae7a14853e13810ed6c35dfed5d2aec757dd18c8561988c799cca3cc517dbd"
+        },
+        {
+            "path": "src/source_scan.rs",
+            "sha256": "b026dbd3ebd3082382613d3224c7cdd93087dd34a9d2214278eab4d8b3b32ff9"
+        },
+        {
+            "path": "src/state.rs",
+            "sha256": "d20a63ccf713764da27dee4a4a05c52adf7de6f411b352f1d12bda9ad5476003"
+        },
+        {
+            "path": "tests/archive.rs",
+            "sha256": "8b126dc94f7acfbd8eede755a6271376303f5e42dbc2dc1b018d01d89058eeb4"
+        },
+        {
+            "path": "tests/artifact_state.rs",
+            "sha256": "1d8d962606b71d32715a3f9b3bc2b0a2a8a4421d1bdacf45ad0d7f8593737230"
+        },
+        {
+            "path": "tests/artifact_store.rs",
+            "sha256": "0038d2212794b61032a568e2b47c33e2b557eea09f7db01daec1584fe04b9fc0"
+        },
+        {
+            "path": "tests/capture_integration.rs",
+            "sha256": "93a316c6d66518ace23739c4205e0139b6b3f240fa468a9f7bb9cb4f5cdaee82"
+        },
+        {
+            "path": "tests/capture_pipeline.rs",
+            "sha256": "0a64b9bb15452f9837bb32258d344621fcee275ce4ceb9530b2a0008cc0cec38"
+        },
+        {
+            "path": "tests/capture_state.rs",
+            "sha256": "d526b195bb8d53f5d9e45e447b7aba0d881a12aad64b07b2e12039416e73d41a"
+        },
+        {
+            "path": "tests/cli.rs",
+            "sha256": "83d42be898d660f35d3343c23ac84ef036734d28051b4db28b383b33e5294937"
+        },
+        {
+            "path": "tests/config.rs",
+            "sha256": "ece024cff94c46e6906b36939855414b7a5dfb2fbc9d205a3fd1d52a93e4eb08"
+        },
+        {
+            "path": "tests/contracts.rs",
+            "sha256": "5ee8b3153575f19db109bb5d9c8fefbde51da65c50cc144d90e542736f5b3c33"
+        },
+        {
+            "path": "tests/domain.rs",
+            "sha256": "5bdbd21bdd45b6260480ed08c64ff673d6b0bae555987fe171f8da0f92ab1212"
+        },
+        {
+            "path": "tests/embedded_archive.rs",
+            "sha256": "c02df3fc75c25f4e1c31d674afe6f5f50a68122a227e135aacc88295193827b4"
+        },
+        {
+            "path": "tests/encrypted_manifest_sort.rs",
+            "sha256": "70c645ad689a6108bdaa52dd8b3c50e3b8f3a2f4471451ca07f2b2d87d8e2fb7"
+        },
+        {
+            "path": "tests/encrypted_spool.rs",
+            "sha256": "f6390a309413255b89595d55886f6dfcaf5d90743df5bd4cf4aa0b6ab028d9f3"
+        },
+        {
+            "path": "tests/identity.rs",
+            "sha256": "251fb52035477200d146bd1c025c7ae4eaa7f6271611951db6eaefb166f15b1e"
+        },
+        {
+            "path": "tests/local_endpoint.rs",
+            "sha256": "64ca3dfe4f3bf3b1a671274aecec745514a09a3ba129330117b7e3e3f01df4f0"
+        },
+        {
+            "path": "tests/manifest.rs",
+            "sha256": "3fb0b1a2e975b20dd8682b838bc77f4bf66e9d9cd09eb18fd7b78721c5f951f4"
+        },
+        {
+            "path": "tests/manifest_artifact.rs",
+            "sha256": "bb9b6f17990492b5f8489f0f8879f4e11b46e82d49cf458c55a8e0016a3c5b66"
+        },
+        {
+            "path": "tests/manifest_spool.rs",
+            "sha256": "8c4ec7347ba43dc9bc4a71f5e167734e5ee05caab55e25b60d8970d92f8eff0c"
+        },
+        {
+            "path": "tests/payload_capture.rs",
+            "sha256": "3e09d54162313e5e84baaf76bfd5250e7a5aa0bcb58f24d72f37eadbc29ec1d5"
+        },
+        {
+            "path": "tests/payload_state.rs",
+            "sha256": "fc7925249f66c023e2da6f09dd6a1fe2569cb84fc4a4ac43842d963c6ffa66d3"
+        },
+        {
+            "path": "tests/payload_store.rs",
+            "sha256": "47130cdd9ad451e38d0ef7ec48410686d7fb9c48feca8b8257d2012d0a03bf7d"
+        },
+        {
+            "path": "tests/planner.rs",
+            "sha256": "278506227b69a13ba48334a658bc13689900f5bdc82dcfc24e90846290442f8f"
+        },
+        {
+            "path": "tests/resources.rs",
+            "sha256": "3c1d2678bdadb99d9856592a11d5c74511fab83d30d4528331aee6fd412e242f"
+        },
+        {
+            "path": "tests/restore.rs",
+            "sha256": "0372e50819d91794aa62982640714418caada0649c9c0794c8a39338c6e0f58f"
+        },
+        {
+            "path": "tests/scheduler.rs",
+            "sha256": "7a9111808644f8d43182030918e5cfae59dce06e2b86108eb889123a2aa699ac"
+        },
+        {
+            "path": "tests/service.rs",
+            "sha256": "616582e3197560bbcefbc641853b182121c6b41c4704674c8619f5fd31873818"
+        },
+        {
+            "path": "tests/source_scan.rs",
+            "sha256": "789d7fb762729e8aa293b9fdcef79a826912741c477916ab8b53ee0a612797b8"
+        },
+        {
+            "path": "tests/state.rs",
+            "sha256": "fd29d726fa69ab14f4196ce70af213c6128f1e9c2ee6128fbca2c9f6f2cfe428"
+        },
+        {
+            "path": "tools/check.py",
+            "sha256": "d7bdcb4fcefb26e27b962974d8ae9ffb2fbf51938b1e3b986fe5dc7e07b056a1"
+        }
+    ],
+    "host_envelope": {
+        "memory_max_bytes": 1073741824,
+        "memory_high_bytes": 805306368,
+        "swap_max_bytes": 0,
+        "compiler_jobs": 1,
+        "test_threads": 1,
+        "max_workers": 1,
+        "mechanism": "tools/check.py verifies the actual child cgroup; fixed systemd unit serializes guarded work"
+    },
+    "checks": [
+        {
+            "command": "python3 tools/check.py test --locked --all-targets --features embedded-archive -- --include-ignored",
+            "result": "passed",
+            "log": "build/validation/payload-store-tests.log",
+            "log_sha256": "f3236107e434305b0a1974561daf8f67ebe88b2a6ed4b1e908e61f52177b9f37",
+            "reported_memory_peak": "659.8M",
+            "swap_used_bytes": 0,
+            "tests_passed": 125,
+            "tests_failed": 0,
+            "tests_ignored": 0
+        },
+        {
+            "command": "python3 tools/check.py clippy --locked --all-targets --features embedded-archive -- -D warnings",
+            "result": "passed",
+            "log": "build/validation/payload-store-clippy.log",
+            "log_sha256": "5959a61efb4e31a1d57aabb3d56c07f5838fca6924747d71756a6b45b8517982",
+            "reported_memory_peak": "236.4M",
+            "swap_used_bytes": 0
+        },
+        {
+            "command": "cargo fmt --all --check",
+            "result": "passed"
+        },
+        {
+            "command": "git diff --check",
+            "result": "passed"
+        }
+    ],
+    "integration_evidence": [
+        "Prepare separate immutable manifest and payload intents before source reads",
+        "Retain typed stage ownership with distinct capture locks and generated names",
+        "Reuse pinned no-follow file operations, guarded quotas, free-space reserve and no-replacement publication",
+        "Require a linked sealed manifest artifact and exact logical manifest verification before payload publication",
+        "Hash exact authenticated ciphertext in one read pass and check unchanged file metadata",
+        "Synchronize filesystem state before atomic payload measurement/capture-link database commit",
+        "Reconcile complete pending, matching hard-link, final-only and already sealed payloads",
+        "Withhold payload publication while its manifest is not sealed, then recover once the matching manifest commits",
+        "Preserve corrupt/incomplete files and changed/conflicting sealed state; reject live writers, wrong keys and storage",
+        "Reserve16MiB data and16MiB spool in composed source fixture; release original sorter before fresh payload verification",
+        "Migrate version-three state to version four without losing capture records"
+    ],
+    "native_baseline": {
+        "commit": "1da18797a7ecfa2faf115f4213a2aa5b442e2823",
+        "run_id": 42815740853,
+        "url": "https://github.com/mayazrakib/relic/actions/runs/42815740853",
+        "linux": "success",
+        "windows": "success",
+        "macos": "success",
+        "limits": "Previous streaming payload milestone; current ownership changes require fresh native execution"
+    },
+    "remaining": [
+        "Bounded production restore staging with durable intent, safe publication and recovery",
+        "Archive/S3 adapter integration and independent native recovery",
+        "Large-source segmentation or another qualified provider within the spool cap",
+        "Archive memory/cancellation, native publication reconciliation and fenced authority",
+        "Key-provider lifecycle, retention and cleanup",
+        "General multipass encrypted sorting, immutable native views and full metadata",
+        "Windows owned storage and source scanning",
+        "All remaining full-system acceptance gates"
+    ]
+}

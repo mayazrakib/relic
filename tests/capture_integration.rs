@@ -3,16 +3,18 @@
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-use relic::artifact_store::ArtifactStore;
+use relic::artifact_store::{ArtifactStore, PayloadVerification};
 use relic::encrypted_manifest_sort::{EncryptedManifestSort, SortLimits};
 use relic::encrypted_spool::SpoolLimits;
 use relic::identity::hash_domain;
 use relic::local_endpoint::{FileIdentity, LocalEndpoint};
 use relic::manifest_artifact::seal_sorted_manifest;
+use relic::payload_capture::{PayloadCapture, PayloadLimits};
 use relic::resources::{Demand, ResourceClass, ResourcePool, StageGuard};
 use relic::source_scan::{ScanLimits, scan_source_pinned};
-use relic::state::{CaptureBinding, ManifestArtifactBinding, StateStore};
+use relic::state::{CaptureBinding, ManifestArtifactBinding, PayloadArtifactBinding, StateStore};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 fn get_sort_limits() -> SortLimits {
@@ -23,15 +25,25 @@ fn get_sort_limits() -> SortLimits {
         max_chunk_entries: 1,
         max_runs: 4,
         max_fan_in: 4,
-        max_cipher_bytes: 4 * 1024 * 1024,
+        max_cipher_bytes: 2 * 1024 * 1024,
         max_memory_bytes: 8 * 1024 * 1024,
     }
 }
 
 fn get_spool_limits() -> SpoolLimits {
     SpoolLimits {
-        plaintext_bytes: 2 * 1024 * 1024,
-        ciphertext_bytes: 3 * 1024 * 1024,
+        plaintext_bytes: 512 * 1024,
+        ciphertext_bytes: 1024 * 1024,
+    }
+}
+
+fn get_payload_limits() -> PayloadLimits {
+    PayloadLimits {
+        max_entries: 20,
+        max_file_bytes: 1024,
+        max_total_bytes: 2048,
+        max_depth: 4,
+        spool: get_spool_limits(),
     }
 }
 
@@ -80,7 +92,7 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
             Some("capture_endpoint"),
             Demand {
                 data_bytes: 16 * 1024 * 1024,
-                spool_bytes: 8 * 1024 * 1024,
+                spool_bytes: 16 * 1024 * 1024,
                 open_files: 32,
                 cpu_workers: 1,
                 streams: 1,
@@ -117,12 +129,32 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
         relative_name: "artifact_artifact_1.sealed".into(),
         key_ref: "key_1".into(),
     };
+    let payload_binding = PayloadArtifactBinding {
+        artifact_id: "payload_1".into(),
+        capture_id: binding.capture_id.clone(),
+        storage_endpoint_id: "local_artifacts".into(),
+        storage_identity: artifacts.storage_identity().to_owned(),
+        relative_name: "payload_payload_1.sealed".into(),
+        key_ref: "key_1".into(),
+    };
     let mut store = StateStore::open(&state).unwrap();
     store.bind_capture(&binding).unwrap();
     let mut stage = artifacts
         .begin(&mut store, &artifact_binding, get_spool_limits(), &guard)
         .unwrap();
+    let payload_stage = artifacts
+        .begin_payload(&mut store, &payload_binding, get_spool_limits(), &guard)
+        .unwrap();
     let pending = root.join("artifacts/.artifact_artifact_1.pending");
+    let pending_payload = root.join("artifacts/.payload_payload_1.pending");
+    assert_eq!(
+        store
+            .get_payload_artifact("payload_1")
+            .unwrap()
+            .unwrap()
+            .effect_state,
+        "prepared"
+    );
     assert_eq!(
         store
             .get_manifest_artifact("artifact_1")
@@ -132,10 +164,19 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
         "prepared"
     );
     let sorter = EncryptedManifestSort::create(&runs, &key, get_sort_limits(), &guard).unwrap();
-    let (mut sorter, count) = scan_source_pinned(
+    let capture = PayloadCapture::new(
+        sorter,
+        payload_stage,
+        &binding,
+        &key,
+        get_payload_limits(),
+        &guard,
+    )
+    .unwrap();
+    let (capture, count) = scan_source_pinned(
         &endpoint,
         "private_source_id",
-        sorter,
+        capture,
         ScanLimits {
             max_depth: 4,
             max_open_files: 7,
@@ -147,6 +188,34 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
     )
     .unwrap();
     assert_eq!(count, 2);
+    let captured = capture.finish().unwrap();
+    assert_eq!(captured.summary.entry_count, 2);
+    assert_eq!(captured.summary.file_count, 1);
+    assert_eq!(captured.summary.payload_bytes, 4);
+    let mut sorter = captured.metadata;
+    let payload_stage = captured.destination;
+    let expected_checksum = format!(
+        "sha256:{}",
+        Sha256::digest(b"data")
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    let mut saw_file = false;
+    sorter
+        .visit_sorted(&binding.capture_id, |entry| {
+            if entry.kind == "file" {
+                assert_eq!(entry.size_bytes.as_deref(), Some("4"));
+                assert_eq!(
+                    entry.content_digest.as_deref(),
+                    Some(expected_checksum.as_str())
+                );
+                saw_file = true;
+            }
+            Ok(())
+        })
+        .unwrap();
+    assert!(saw_file);
     let artifact = seal_sorted_manifest(
         &mut sorter,
         count,
@@ -160,7 +229,7 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
     for path in fs::read_dir(&runs)
         .unwrap()
         .map(|entry| entry.unwrap().path())
-        .chain(std::iter::once(pending))
+        .chain([pending, pending_payload])
     {
         let bytes = fs::read(path).unwrap();
         assert!(
@@ -183,6 +252,22 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
         .commit(stage, &mut store, "key_1", &key, &artifact)
         .unwrap();
     assert_eq!(committed.effect_state, "sealed");
+    drop(sorter);
+    let mut verifier =
+        EncryptedManifestSort::create(&runs, &key, get_sort_limits(), &guard).unwrap();
+    let mut verification = PayloadVerification {
+        key_ref: "key_1",
+        key: &key,
+        limits: get_payload_limits(),
+        sorter: &mut verifier,
+    };
+    let committed_payload = artifacts
+        .commit_payload(payload_stage, &mut store, &mut verification)
+        .unwrap();
+    assert_eq!(committed_payload.effect_state, "sealed");
+    assert_eq!(committed_payload.file_count.as_deref(), Some("1"));
+    assert_eq!(committed_payload.payload_bytes.as_deref(), Some("4"));
+    drop(verifier);
     let capture = store.get_capture(&binding.capture_id).unwrap().unwrap();
     assert_eq!(
         capture.manifest_digest.as_deref(),
@@ -190,7 +275,7 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
     );
     assert_eq!(capture.manifest_entry_count.as_deref(), Some("2"));
     assert_eq!(capture.manifest_artifact_id.as_deref(), Some("artifact_1"));
-    drop(sorter);
+    assert_eq!(capture.payload_artifact_id.as_deref(), Some("payload_1"));
     drop(artifacts);
     drop(store);
     let metadata = fs::metadata(&artifact_directory).unwrap();
@@ -215,11 +300,25 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
         )
         .unwrap();
     assert_eq!(reconciled, committed);
+    let mut verifier =
+        EncryptedManifestSort::create(&runs, &key, get_sort_limits(), &guard).unwrap();
+    let mut verification = PayloadVerification {
+        key_ref: "key_1",
+        key: &key,
+        limits: get_payload_limits(),
+        sorter: &mut verifier,
+    };
+    let reconciled_payload = reopened_artifacts
+        .reconcile_payload(&mut reopened_state, "payload_1", &mut verification, &guard)
+        .unwrap();
+    assert_eq!(reconciled_payload, committed_payload);
+    drop(verifier);
     let capture = reopened_state
         .get_capture(&binding.capture_id)
         .unwrap()
         .unwrap();
     assert_eq!(capture.manifest_artifact_id.as_deref(), Some("artifact_1"));
+    assert_eq!(capture.payload_artifact_id.as_deref(), Some("payload_1"));
     drop(reopened_state);
     drop(reopened_artifacts);
     drop(endpoint);

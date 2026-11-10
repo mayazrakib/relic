@@ -31,3 +31,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 8. Artifact Ownership Milestone
 
 [Run 42813731012](https://github.com/mayazrakib/relic/actions/runs/42813731012) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `8073389`. Unix jobs include the artifact store's process-boundary reconciliation tests; Windows compiles the unavailable-platform implementation and runs the portable journal tests. These results do not establish Windows artifact storage support or power-loss durability. Later source-payload changes require their own native run.
+
+## 9. Source Payload Milestone
+
+[Run 42815740853](https://github.com/mayazrakib/relic/actions/runs/42815740853) passed on all three selected native targets for `1da1879`. This covers the portable streaming payload tests and Unix pinned-source, source-deletion, and exact-manifest verification fixtures. Subsequent durable payload ownership and reconciliation changes require fresh native execution. These results do not establish Windows source scanning, production restore staging, or destination archive acceptance.

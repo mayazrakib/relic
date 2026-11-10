@@ -323,15 +323,16 @@
         "docs/evidence/low_memory.json",
         "docs/evidence/pinned_capture.json",
         "docs/evidence/artifact_store.json",
-        "docs/evidence/payload_capture.json"
+        "docs/evidence/payload_capture.json",
+        "docs/evidence/payload_store.json"
     ],
     "blockers": [],
-    "next_action": "Push payload capture milestone and observe native CI without restarting. Add durable payload ownership and crash reconciliation with capture/manifest linkage; integrate bounded staged restore and archive adapters. Close archive memory/cancellation/publication qualification before enabled daemon jobs. All full-system phases remain required under 1GiB/high768MiB/no swap and at most one worker.",
+    "next_action": "Push durable payload milestone and observe native CI without restarting. Implement owned verified payload access and a bounded production restore staging tree with durable intent, no-overwrite publication and crash reconciliation. Integrate archive/S3 and large-source handling within spool cap; close engine memory/cancellation/fencing before enabled daemon jobs. All full-system phases remain required with1GiB/high768MiB/no swap and at most one worker.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "c4c4393576df682512aeb60cf04553187671b601a6e0879c108e46740341697e",
+    "source_fingerprint": "7fedfbef8808d55ba3ea612e514d583bf7f5c3967bcadefafe2323ac49b64ad2",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -639,17 +640,40 @@
                 "docs/evidence/payload_capture.json"
             ],
             "limits": "Internal stream and source-deletion fixture; no durable payload journal, key lifecycle, production restore/archive adapter, Windows scanner or independent archive format recovery qualification"
+        },
+        {
+            "name": "Durable payload journal with sealed-manifest prerequisite",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "database/migrations/00004_payload_artifacts.sql",
+                "tests/payload_state.rs",
+                "docs/evidence/payload_store.json"
+            ],
+            "limits": "Low-level evidence supplied by trusted caller; no cryptographic verification in state API"
+        },
+        {
+            "name": "Unix owned payload commit and authenticated crash reconciliation",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/payload_store.rs",
+                "tests/capture_integration.rs",
+                "docs/payload_store.md",
+                "docs/evidence/payload_store.json"
+            ],
+            "limits": "Process boundaries only; no power-loss, Windows, production restore/archive, key-provider or cleanup qualification"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented same-read pinned source payload capture with bounded encrypted streaming, checksums, exact logical-manifest verification and provisional-consumer contract. Source-deletion recovery and source-change-abort fixtures pass. All114 tests pass, zero ignored; Clippy and formatting pass. Test peak548.9M and Clippy240.3M, zero swap. Prior8073389 native CI passed all three targets; payload native execution pending. Full-system goal remains active."
+        "result": "Implemented schema4 payload ownership, immutable journal and capture linkage, shared Unix storage primitives, typed stages and authenticated crash reconciliation against sealed manifest. Full pinned capture prepares both intents before source reads and commits manifest first. All125 tests pass, zero ignored; Clippy and formatting pass. Full suite peak659.8M, Clippy236.4M, zero swap. Prior1da1879 native CI passed all three targets; current native execution pending. Full-system goal remains active."
     },
     "remote_checkpoint": {
-        "commit": "80733895e16787d22837ff976965c890b5c06381",
+        "commit": "1da18797a7ecfa2faf115f4213a2aa5b442e2823",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42813731012,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42813731012",
+        "native_ci_run_id": 42815740853,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42815740853",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -659,10 +683,10 @@
         }
     },
     "prior_native_checkpoint": {
-        "commit": "49ef7343482b8900627797930a5addf0ccf1044d",
+        "commit": "80733895e16787d22837ff976965c890b5c06381",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42807908209,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42807908209",
+        "native_ci_run_id": 42813731012,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42813731012",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -745,6 +769,38 @@
             "status": "resolved",
             "corrective_commit": "7a2e98d9aa0389247325ec0ad785e0085a5e5a14",
             "verification_run": 42806104925
+        },
+        "payload_test_hex_format": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "sha2 0.11 array does not implement LowerHex",
+            "correction": "Use explicit bounded byte-to-hex conversion in fixture",
+            "status": "resolved",
+            "verification": "114-test full suite"
+        },
+        "payload_endpoint_fixture_api": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Fixture used nonexistent LocalEndpoint::open",
+            "correction": "Use actual resolve API with independently observed device/inode identity",
+            "status": "resolved",
+            "verification": "114-test full suite"
+        },
+        "payload_store_cancellation_fixture": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Test setup tried creating a sorter with an already canceled guard",
+            "correction": "Prepare disposable verification sorter before canceling; exercise store cancellation entry directly",
+            "status": "resolved",
+            "verification": "125-test full suite"
+        },
+        "artifact_kind_style_lint": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Clippy upper_case_acronyms conflicts with required uppercase enum style",
+            "correction": "Scoped style lint allowance on ArtifactKind only",
+            "status": "resolved",
+            "verification": "Clippy all-targets warnings denied"
         }
     }
 }
