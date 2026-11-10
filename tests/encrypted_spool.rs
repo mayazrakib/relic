@@ -1,7 +1,8 @@
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 
 use relic::encrypted_spool::{
-    EncryptedSpoolWriter, SpoolError, SpoolLimits, decrypt_spool, encrypt_spool,
+    EncryptedSpoolReader, EncryptedSpoolWriter, SpoolError, SpoolLimits, decrypt_spool,
+    encrypt_spool,
 };
 use relic::resources::StageGuard;
 use zeroize::Zeroizing;
@@ -203,4 +204,75 @@ fn streaming_writer_poisoned_after_quota_or_sink_failure() {
     .unwrap();
     assert!(writer.write_all(&vec![42; 65_536]).is_err());
     assert!(matches!(writer.finish(), Err(SpoolError::POISONED)));
+}
+
+#[test]
+fn streaming_reader_authenticates_final_before_eof() {
+    let key = Zeroizing::new([18_u8; 32]);
+    let bytes = vec![83_u8; 150_000];
+    let encrypted = encrypt(&bytes, &key);
+    let mut reader = EncryptedSpoolReader::new(
+        Cursor::new(&encrypted),
+        &key,
+        b"job-1/manifest",
+        get_limits(),
+        &StageGuard::default(),
+    )
+    .unwrap();
+    let mut restored = Vec::new();
+    let mut buffer = [0_u8; 317];
+
+    loop {
+        let count = reader.read(&mut buffer).unwrap();
+
+        if count == 0 {
+            break;
+        }
+
+        restored.extend_from_slice(&buffer[..count]);
+    }
+
+    assert_eq!(restored, bytes);
+    reader.finish().unwrap();
+    let mut partial = EncryptedSpoolReader::new(
+        Cursor::new(&encrypted),
+        &key,
+        b"job-1/manifest",
+        get_limits(),
+        &StageGuard::default(),
+    )
+    .unwrap();
+    partial.read_exact(&mut [0_u8; 7]).unwrap();
+    partial.finish().unwrap();
+}
+
+#[test]
+fn streaming_reader_poisoned_on_missing_or_corrupt_final() {
+    let key = Zeroizing::new([19_u8; 32]);
+    let encrypted = encrypt(b"authenticated chunk", &key);
+    let mut truncated = EncryptedSpoolReader::new(
+        Cursor::new(&encrypted[..encrypted.len() - 1]),
+        &key,
+        b"job-1/manifest",
+        get_limits(),
+        &StageGuard::default(),
+    )
+    .unwrap();
+    let mut output = Vec::new();
+    assert!(truncated.read_to_end(&mut output).is_err());
+    assert_eq!(output, b"authenticated chunk");
+    assert!(truncated.read(&mut [0_u8; 1]).is_err());
+    assert!(matches!(truncated.finish(), Err(SpoolError::POISONED)));
+    let mut changed = encrypted.clone();
+    let last = changed.len() - 1;
+    changed[last] ^= 1;
+    let reader = EncryptedSpoolReader::new(
+        Cursor::new(changed),
+        &key,
+        b"job-1/manifest",
+        get_limits(),
+        &StageGuard::default(),
+    )
+    .unwrap();
+    assert!(reader.finish().is_err());
 }

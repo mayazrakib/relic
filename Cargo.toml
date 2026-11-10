@@ -43,3 +43,11 @@ zeroize = "=1.9.1"
 
 [dev-dependencies]
 tempfile = "=3.27.0"
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false

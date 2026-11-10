@@ -8,19 +8,12 @@ The current foundation includes executable contracts, deterministic identities, 
 
 Use the toolchain pins in `.tool-versions`. Build and test with the committed Cargo lockfile. `.cargo/config.toml` limits compilation to one job and test execution to one thread.
 
-On Linux with a user systemd manager, run checks inside the enforced 2 GiB, zero-swap envelope:
+On Linux with a user systemd manager, run checks through the enforced 1 GiB, zero-swap guard:
 ```bash
-systemd-run --user --wait --pipe --collect \
-    --property=MemoryMax=2G \
-    --property=MemorySwapMax=0 \
-    --property=TasksMax=128 \
-    --property=CPUQuota=200% \
-    --property="WorkingDirectory=$PWD" \
-    --setenv=CARGO_BUILD_JOBS=1 \
-    --setenv=RUST_TEST_THREADS=1 \
-    --setenv=RAYON_NUM_THREADS=1 \
-    "$HOME/.cargo/bin/cargo" test --locked --all-targets
+python3 tools/check.py test --locked --all-targets
 ```
+
+The guard verifies a 1 GiB maximum and a 768 MiB pressure threshold inside the actual child cgroup, disables swap, and permits one guarded run at a time. Development and test profiles omit debug symbols and incremental compiler caches. Cargo and test parallelism remain one. The guarded Taskfile commands currently require Linux; native CI uses its platform runners separately.
 
 Run heavy checks serially. A limit or timeout failure is not a passing acceptance result. The external-engine proof is explicitly ignored unless invoked with the verified tool paths described in [Archive Feasibility](docs/archive_feasibility.md).
 

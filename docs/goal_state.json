@@ -49,7 +49,7 @@
         "max_corrective_cycles_per_failure": 2,
         "max_external_retries": 2,
         "max_optimization_candidates_per_subsystem": 3,
-        "max_workers": 3,
+        "max_workers": 1,
         "require_new_evidence_before_retry": true,
         "reopen_only_if_inputs_change": true,
         "allow_acceptance_waivers": false,
@@ -63,6 +63,17 @@
             "cluster_soak_per_topology": 21600
         },
         "host_memory": {
+            "aggregate_bytes": 1073741824,
+            "pressure_threshold_bytes": 805306368,
+            "swap_bytes": 0,
+            "compiler_jobs": 1,
+            "test_threads": 1,
+            "heavy_commands": "serialized",
+            "linux_enforcement": "python3 tools/check.py: fixed relic-validation service with MemoryMax=1G MemoryHigh=768M MemorySwapMax=0 TasksMax=128 CPUQuota=200%",
+            "probe": "Child reported memory.max=1073741824, memory.high=805306368, memory.swap.max=0; direct unguarded inside invocation was rejected",
+            "largest_reported_validation_peak": "770.2M passing lean test build; final combined suite 633M, both zero swap"
+        },
+        "previous_host_memory": {
             "aggregate_bytes": 2147483648,
             "swap_bytes": 0,
             "compiler_jobs": 1,
@@ -308,15 +319,16 @@
         "docs/evidence/foundation.json",
         "docs/evidence/embedded_archive.json",
         "docs/evidence/bounded_primitives.json",
-        "docs/evidence/capture_admission.json"
+        "docs/evidence/capture_admission.json",
+        "docs/evidence/low_memory.json"
     ],
     "blockers": [],
-    "next_action": "Push tested capture-admission milestone to implementation branch for fresh native CI. Continue endpoint resolver/source authority, encrypted ordering and staging lifecycle, archive resource/cancellation qualification, and fenced publication. Do not infer production readiness from component fixture passes.",
+    "next_action": "Push tested low-memory milestone and inspect fresh native CI without restarting live jobs. Continue source scanning from pinned endpoint handles into encrypted staging, then durable artifact ownership, archive resource/cancellation qualification and fenced publication. Keep the full plan and the 1GiB/no-swap limit.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "71d0ffd14a2f2cd5768052a26332760c4ee9a695d5ddeca86d7ee3f87cc4de4f",
+    "source_fingerprint": "773566f9179d492d8fed8ed5507602cb0a1566388effe45fc17f267d0f0b355e",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -532,13 +544,71 @@
                 "docs/evidence/capture_admission.json"
             ],
             "limits": "Trusted procfs required; same-device bind mounts, macOS mutable-device isolation and full metadata remain pending"
+        },
+        {
+            "name": "One-GiB guarded development and lean profiles",
+            "phase": 0,
+            "status": "passed",
+            "evidence": [
+                "tools/check.py",
+                "Cargo.toml",
+                "Taskfile.yml",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "Linux development guard; native release memory qualification remains separate"
+        },
+        {
+            "name": "Streaming encrypted spool reader with reusable record buffer",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/encrypted_spool.rs",
+                "tests/encrypted_spool.rs",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "Whole-stream authentication required before publication; crypto review pending"
+        },
+        {
+            "name": "Bounded encrypted manifest runs and streaming merge",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/encrypted_manifest_sort.rs",
+                "tests/encrypted_manifest_sort.rs",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "At most four runs; no large-tree multipass merge or durable crash cleanup"
+        },
+        {
+            "name": "Pinned Unix endpoint identity and capacity evidence",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "src/local_endpoint.rs",
+                "tests/local_endpoint.rs",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "Conservative mount ambiguity handling; scanner/policy integration and Windows support pending"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Added policy preflight, capture migration/bindings, authenticated spool/manifest streams, active-job leases, and Linux inode pinning. Eighty-one local tests, feature-enabled Clippy and formatting pass under the fixed 2GiB/no-swap cap. Recorded and corrected native macOS fixture assumption; fresh CI required. Full goal remains active."
+        "result": "Reduced hard host cap to1GiB with high768MiB/zero swap, one worker, lean profiles and bounded encrypted buffers. All89 tests and Clippy pass. Added encrypted run sorter/local endpoint component tests. Native previous run passed Linux/macOS; corrected Windows test cfg awaiting fresh CI. Full goal remains active."
     },
     "remote_checkpoint": {
+        "commit": "4de2f03f85a7366f2f12ce4535d7f5eadf04961a",
+        "branch": "implementation/relic-full-system",
+        "native_ci_run_id": 42803038693,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42803038693",
+        "status": "completed_with_windows_test_cfg_failure",
+        "push_transport": "existing authorized SSH credential",
+        "results": {
+            "linux-x86_64": "success",
+            "macos-arm64": "success",
+            "windows-x86_64": "failure: Unix cfg attached to shared capture helper"
+        }
+    },
+    "prior_native_checkpoint": {
         "commit": "4b29fee9703bd8bbad9d645179fc1a5dedbab79c",
         "branch": "implementation/relic-full-system",
         "native_ci_run_id": 42799770445,
@@ -549,19 +619,6 @@
             "linux-x86_64": "success",
             "windows-x86_64": "success",
             "macos-arm64": "failure: invalid-byte fixture creation EILSEQ before scanner execution"
-        }
-    },
-    "prior_native_checkpoint": {
-        "commit": "925785e3f0a8a78e49999d15313bc2d77cb9f636",
-        "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42796543305,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42796543305",
-        "status": "completed_successfully",
-        "push_transport": "existing authorized SSH credential",
-        "results": {
-            "linux-x86_64": "success",
-            "windows-x86_64": "success",
-            "macos-arm64": "success"
         }
     },
     "earlier_native_checkpoints": [
@@ -577,6 +634,19 @@
                 "windows-x86_64": "failure: concurrent initialization DatabaseBusy",
                 "macos-arm64": "failure: daemon exited before readiness; SQLite ancestor symlink handling suspected"
             }
+        },
+        {
+            "commit": "925785e3f0a8a78e49999d15313bc2d77cb9f636",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42796543305,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42796543305",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
         }
     ],
     "failure_controls": {
@@ -586,7 +656,17 @@
             "observed_error": "EILSEQ while creating byte 0xff filename on native test filesystem",
             "corrective_cycles": 1,
             "max_corrective_cycles": 2,
-            "correction": "Shared ASCII native fixture plus explicit Linux non-UTF-8 fixture; fresh native execution pending"
+            "correction": "Shared ASCII native fixture plus explicit Linux non-UTF-8 fixture; fresh native execution pending",
+            "corrective_commit": "4de2f03f85a7366f2f12ce4535d7f5eadf04961a",
+            "verification_run": 42803038693,
+            "status": "resolved"
+        },
+        "windows_state_test_cfg": {
+            "initial_run": 42803038693,
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Unconditional capture helper and Unix-only symlink test",
+            "status": "locally_corrected_native_verification_pending"
         }
     }
 }

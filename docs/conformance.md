@@ -18,7 +18,9 @@ The [foundation evidence](evidence/foundation.json) binds the tested source fing
 
 ## 3. Host Memory Policy
 
-All heavy local validation runs serially in a user systemd cgroup with `MemoryMax=2G`, `MemorySwapMax=0`, `TasksMax=128`, and `CPUQuota=200%`. Compilation uses one job; tests use one thread. The actual probe process read `memory.max=2147483648` and `memory.swap.max=0`. The initial foundation validation peaked at approximately 1.4 GiB, with no swap used. A later cached foundation proof run peaked at 119.8 MiB; subsequent combined work reached the 2 GiB cap as recorded below. These measurements establish the development envelope, not the application's release performance targets.
+Current heavy local validation runs serially through `python3 tools/check.py`, with `MemoryMax=1G`, `MemoryHigh=768M`, `MemorySwapMax=0`, `TasksMax=128`, and `CPUQuota=200%`. Compilation uses one job; tests use one thread. The child verifies its actual cgroup before Cargo starts. Development and test profiles omit debug symbols and incremental compilation. At most one implementation worker runs alongside the coordinator.
+
+Earlier foundation and capture checks used a 2 GiB cap, with recorded peaks between 119.8 MiB and 2 GiB. Those are historical observations; the newer 1 GiB limit supersedes that development policy. These measurements establish the development envelope, not the application's release performance targets.
 
 ## 4. Native and Release Gaps
 
@@ -57,3 +59,9 @@ Capture state now persists the first source-view binding and permits one manifes
 The preceding native run passed Linux and Windows; macOS failed creating a filename unsupported by its test filesystem before scanner execution. The fixture correction requires a fresh native run. Linux scanning now pins regular inodes before content opens and rejects cross-device traversal; same-device bind mounts and macOS mutable-device isolation remain open.
 
 The [archive staging investigation](archive_staging_feasibility.md) records the pinned engine's full-index allocations, cancellation gaps, copy/publication semantics, and reconciliation risks. These remain production qualification gates. No archive operation is exposed through enabled daemon jobs.
+
+## 8. Reduced Development Memory
+
+The [low-memory evidence](evidence/low_memory.json) records the stricter 1 GiB hard limit, 768 MiB pressure threshold, zero swap, one compiler job, one test thread, and one implementation worker. The lean test build passed with a reported peak of 770.2 MiB; the final combined suite passed 89 tests with zero ignored and a 633 MiB peak. Clippy and formatting passed. Cgroup measurements include charged file cache and are not RSS measurements.
+
+Development and test profiles omit debug symbols and incremental compilation. The development CLI shrank from 175,717,528 to 26,360,952 bytes, and the obsolete 2.2 GiB incremental cache was removed. Streaming encrypted readers and writers now reuse a single record buffer rather than allocating separate plaintext and ciphertext copies. Local endpoint evidence and encrypted sorting have focused tests; general large-tree merging, Windows support, durable staging ownership, and complete source/engine integration remain open.

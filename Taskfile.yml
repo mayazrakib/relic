@@ -12,20 +12,20 @@ tasks:
     init:
         desc: Fetch the locked Rust dependencies.
         cmds:
-            - cargo fetch --locked
+            - python3 tools/check.py fetch --locked
     build:
         desc: Build the daemon and command-line interface.
         cmds:
-            - cargo build --locked
+            - python3 tools/check.py build --locked
     check:
         desc: Check the Rust targets without rewriting files.
         cmds:
-            - cargo check --locked --all-targets
+            - python3 tools/check.py check --locked --all-targets
     test:
         desc: Run the implemented Rust acceptance checks.
         cmds:
-            - cargo test --locked
+            - python3 tools/check.py test --locked
     conformance:
         desc: Verify schemas, vectors, and contract rejection cases.
         cmds:
-            - cargo test --locked --test contracts
+            - python3 tools/check.py test --locked --test contracts

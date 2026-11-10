@@ -1,7 +1,6 @@
 use relic::state::{CaptureBinding, StateError, StateStore};
 use serde_json::json;
 
-#[cfg(unix)]
 fn prepare_capture(store: &mut StateStore, binding: &serde_json::Value) {
     let key = &binding["commit_key"];
     let capture = CaptureBinding {
@@ -23,6 +22,7 @@ fn prepare_capture(store: &mut StateStore, binding: &serde_json::Value) {
         .unwrap();
 }
 
+#[cfg(unix)]
 #[test]
 fn accepts_a_trusted_ancestor_alias_but_rejects_final_directory_symlink() {
     use std::os::unix::fs::symlink;

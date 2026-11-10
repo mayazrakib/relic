@@ -15,3 +15,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 4. Scanner Fixture Finding
 
 [Run 42799770445](https://github.com/mayazrakib/relic/actions/runs/42799770445) passed on Linux and Windows for `4b29fee`. macOS compiled and passed the preceding tests, including the restore primitives, but failed while creating a filename containing byte `0xff`: its test filesystem returned `Illegal byte sequence` before scanning began. The corrected shared fixture uses a filename accepted by all selected native filesystems. A separate Linux test retains real non-UTF-8 filename coverage. The corrected source requires a fresh native run; the failed job remains a recorded failure.
+
+## 5. Capture Milestone Native Results
+
+[Run 42803038693](https://github.com/mayazrakib/relic/actions/runs/42803038693) passed on Linux and macOS for `4de2f03`, verifying the scanner fixture correction. Windows failed to compile `tests/state.rs`: a `cfg(unix)` attribute attached to the shared capture helper instead of the Unix symlink test. The corrected placement keeps the helper available on Windows and excludes only the Unix test. Fresh native verification of that correction remains required.

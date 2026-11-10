@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 
 use chacha20poly1305::XChaCha20Poly1305;
 use chacha20poly1305::aead::array::Array;
-use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::aead::{Aead, AeadInOut, KeyInit, Payload};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::resources::StageGuard;
@@ -271,7 +271,7 @@ impl<W: Write> EncryptedSpoolWriter<W> {
             context: context.to_vec(),
             limits,
             guard: guard.clone(),
-            buffer: Zeroizing::new(Vec::with_capacity(CHUNK_BYTES)),
+            buffer: Zeroizing::new(Vec::with_capacity(CHUNK_BYTES + TAG_BYTES)),
             plaintext_bytes: 0,
             ciphertext_bytes,
             counter: 0,
@@ -296,14 +296,11 @@ impl<W: Write> EncryptedSpoolWriter<W> {
             self.limits.ciphertext_bytes,
         )?;
         let aad = get_aad(&self.context, 0, self.counter, length);
-        let encrypted = self
-            .cipher
-            .encrypt(
+        self.cipher
+            .encrypt_in_place(
                 &Array(get_nonce(&self.prefix, self.counter)),
-                Payload {
-                    msg: &self.buffer,
-                    aad: &aad,
-                },
+                &aad,
+                &mut *self.buffer,
             )
             .map_err(|_| SpoolError::AUTHENTICATION)?;
         self.guard.check().map_err(|_| SpoolError::RESOURCE)?;
@@ -311,7 +308,7 @@ impl<W: Write> EncryptedSpoolWriter<W> {
             .write_all(&length.to_be_bytes())
             .map_err(SpoolError::IO)?;
         self.destination
-            .write_all(&encrypted)
+            .write_all(&self.buffer)
             .map_err(SpoolError::IO)?;
         self.buffer.as_mut_slice().zeroize();
         self.buffer.clear();
@@ -400,5 +397,249 @@ impl<W: Write> Write for EncryptedSpoolWriter<W> {
         }
 
         Ok(())
+    }
+}
+
+pub struct EncryptedSpoolReader<R: Read> {
+    source: R,
+    cipher: XChaCha20Poly1305,
+    prefix: [u8; 16],
+    context: Vec<u8>,
+    limits: SpoolLimits,
+    guard: StageGuard,
+    buffer: Zeroizing<Vec<u8>>,
+    position: usize,
+    plaintext_bytes: u64,
+    ciphertext_bytes: u64,
+    counter: u64,
+    is_verified: bool,
+    is_poisoned: bool,
+}
+
+impl<R: Read> EncryptedSpoolReader<R> {
+    pub fn new(
+        mut source: R,
+        key: &Zeroizing<[u8; 32]>,
+        context: &[u8],
+        limits: SpoolLimits,
+        guard: &StageGuard,
+    ) -> Result<Self, SpoolError> {
+        if context.is_empty() || context.len() > MAX_CONTEXT_BYTES {
+            return Err(SpoolError::INVALID_INPUT);
+        }
+
+        guard.check().map_err(|_| SpoolError::RESOURCE)?;
+        let ciphertext_bytes = count_bytes(0, HEADER_BYTES, limits.ciphertext_bytes)?;
+        let mut header = [0_u8; HEADER_BYTES as usize];
+        source.read_exact(&mut header).map_err(SpoolError::IO)?;
+
+        if &header[..8] != MAGIC {
+            return Err(SpoolError::AUTHENTICATION);
+        }
+
+        let mut prefix = [0_u8; 16];
+        prefix.copy_from_slice(&header[8..]);
+        let cipher = XChaCha20Poly1305::new_from_slice(key.as_ref())
+            .map_err(|_| SpoolError::INVALID_INPUT)?;
+
+        Ok(Self {
+            source,
+            cipher,
+            prefix,
+            context: context.to_vec(),
+            limits,
+            guard: guard.clone(),
+            buffer: Zeroizing::new(Vec::with_capacity(CHUNK_BYTES + TAG_BYTES)),
+            position: 0,
+            plaintext_bytes: 0,
+            ciphertext_bytes,
+            counter: 0,
+            is_verified: false,
+            is_poisoned: false,
+        })
+    }
+
+    fn read_record(&mut self) -> Result<(), SpoolError> {
+        self.guard.check().map_err(|_| SpoolError::RESOURCE)?;
+        self.buffer.as_mut_slice().zeroize();
+        self.buffer.clear();
+        self.position = 0;
+        self.ciphertext_bytes =
+            count_bytes(self.ciphertext_bytes, 4, self.limits.ciphertext_bytes)?;
+        let mut encoded_length = [0_u8; 4];
+        self.source
+            .read_exact(&mut encoded_length)
+            .map_err(SpoolError::IO)?;
+        let length = u32::from_be_bytes(encoded_length);
+
+        if length as usize > CHUNK_BYTES {
+            return Err(SpoolError::AUTHENTICATION);
+        }
+
+        let is_final = length == 0;
+        let encrypted_bytes = if is_final {
+            16 + TAG_BYTES
+        } else {
+            length as usize + TAG_BYTES
+        };
+        self.ciphertext_bytes = count_bytes(
+            self.ciphertext_bytes,
+            encrypted_bytes as u64,
+            self.limits.ciphertext_bytes,
+        )?;
+        self.buffer.resize(encrypted_bytes, 0);
+        self.source
+            .read_exact(&mut self.buffer)
+            .map_err(SpoolError::IO)?;
+        let aad = get_aad(&self.context, u8::from(is_final), self.counter, length);
+        self.cipher
+            .decrypt_in_place(
+                &Array(get_nonce(&self.prefix, self.counter)),
+                &aad,
+                &mut *self.buffer,
+            )
+            .map_err(|_| SpoolError::AUTHENTICATION)?;
+
+        if is_final {
+            let mut expected = [0_u8; 16];
+            expected[..8].copy_from_slice(&self.plaintext_bytes.to_be_bytes());
+            expected[8..].copy_from_slice(&self.counter.to_be_bytes());
+
+            if self.buffer.as_slice() != expected {
+                return Err(SpoolError::AUTHENTICATION);
+            }
+
+            self.guard.check().map_err(|_| SpoolError::RESOURCE)?;
+            let mut extra = [0_u8; 1];
+
+            if self.source.read(&mut extra).map_err(SpoolError::IO)? != 0 {
+                return Err(SpoolError::AUTHENTICATION);
+            }
+
+            self.is_verified = true;
+            self.buffer = Zeroizing::new(Vec::new());
+            return Ok(());
+        }
+
+        self.plaintext_bytes = count_bytes(
+            self.plaintext_bytes,
+            u64::from(length),
+            self.limits.plaintext_bytes,
+        )?;
+        self.counter = self
+            .counter
+            .checked_add(1)
+            .ok_or(SpoolError::BUDGET_EXCEEDED)?;
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> Result<R, SpoolError> {
+        if self.is_poisoned {
+            return Err(SpoolError::POISONED);
+        }
+
+        while !self.is_verified {
+            self.read_record()?;
+        }
+
+        Ok(self.source)
+    }
+}
+
+impl<R: Read> Read for EncryptedSpoolReader<R> {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        if self.is_poisoned {
+            return Err(std::io::Error::other("encrypted spool is poisoned"));
+        }
+
+        if output.is_empty() || self.is_verified {
+            return Ok(0);
+        }
+
+        let result: Result<usize, SpoolError> = (|| {
+            self.guard.check().map_err(|_| SpoolError::RESOURCE)?;
+
+            if self.position == self.buffer.len() {
+                self.read_record()?;
+            }
+
+            if self.is_verified {
+                return Ok(0);
+            }
+
+            let count = output.len().min(self.buffer.len() - self.position);
+            let end = self.position + count;
+            output[..count].copy_from_slice(&self.buffer[self.position..end]);
+            self.buffer[self.position..end].zeroize();
+            self.position = end;
+            Ok(count)
+        })();
+
+        match result {
+            Ok(count) => Ok(count),
+            Err(_) => {
+                self.is_poisoned = true;
+                self.buffer.as_mut_slice().zeroize();
+                self.buffer.clear();
+                Err(std::io::Error::other("encrypted spool read failed"))
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use std::io::{Read, Write};
+
+    use zeroize::Zeroizing;
+
+    use super::{CHUNK_BYTES, EncryptedSpoolReader, EncryptedSpoolWriter, SpoolLimits, TAG_BYTES};
+    use crate::resources::StageGuard;
+
+    #[test]
+    fn streams_reuse_one_record_buffer_and_release_it_at_verified_eof() {
+        let key = Zeroizing::new([23_u8; 32]);
+        let limits = SpoolLimits {
+            plaintext_bytes: 4 * CHUNK_BYTES as u64,
+            ciphertext_bytes: 5 * CHUNK_BYTES as u64,
+        };
+        let guard = StageGuard::default();
+        let mut writer =
+            EncryptedSpoolWriter::new(Vec::new(), &key, b"buffer-lifetime", limits, &guard)
+                .unwrap();
+        let input = [0x5a_u8; 8192];
+
+        for _ in 0..24 {
+            writer.write_all(&input).unwrap();
+            assert!(writer.buffer.capacity() <= CHUNK_BYTES + TAG_BYTES);
+        }
+
+        let ciphertext = writer.finish().unwrap();
+        let mut reader =
+            EncryptedSpoolReader::new(&ciphertext[..], &key, b"buffer-lifetime", limits, &guard)
+                .unwrap();
+        let mut output = [0_u8; 8192];
+        let mut total_bytes = 0;
+
+        loop {
+            let count = reader.read(&mut output).unwrap();
+
+            if count == 0 {
+                break;
+            }
+
+            assert!(output[..count].iter().all(|byte| *byte == 0x5a));
+            assert!(reader.buffer.capacity() <= CHUNK_BYTES + TAG_BYTES);
+            assert!(
+                reader.buffer[..reader.position]
+                    .iter()
+                    .all(|byte| *byte == 0)
+            );
+            total_bytes += count;
+        }
+
+        assert_eq!(total_bytes, 24 * input.len());
+        assert_eq!(reader.buffer.capacity(), 0);
+        reader.finish().unwrap();
     }
 }

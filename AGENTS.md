@@ -256,7 +256,8 @@ PDFs MUST be generated from Markdown through Pandoc. Agents MUST NOT directly ed
 
 - Agents MUST preserve `master` as the primary branch and use `implementation/relic-full-system` for the approved implementation and CI pushes.
 - Agents MUST read `docs/goal_state.json` and `docs/conformance.md` when continuing the implementation goal.
-- Heavy work on the development host MUST run serially inside an enforced aggregate memory limit of at most 2 GiB with swap disabled. Cargo MUST use one build job, and tests MUST use one thread. The verified Linux mechanism is a user systemd transient service with `MemoryMax=2G` and `MemorySwapMax=0`; all descendants inherit the envelope.
+- Heavy work on the development host MUST run serially inside an enforced aggregate memory limit of at most 1 GiB, with a 768 MiB pressure threshold and swap disabled. Cargo MUST use one build job, and tests MUST use one thread. The Linux mechanism is `python3 tools/check.py`, which uses a fixed user systemd transient service with `MemoryMax=1G`, `MemoryHigh=768M`, and `MemorySwapMax=0`, verifies the actual child cgroup, and prevents overlapping guarded runs. Agents MUST NOT raise this limit without a direct user instruction.
+- Implementation work MUST use at most one worker in addition to the coordinator until the user changes the memory constraint.
 - If enforcement is unavailable or a workload exceeds the limit, agents MUST stop that workload, record the failure, and continue independent lightweight work. Agents MUST NOT raise the limit without a direct user instruction.
 - Agents MUST NOT count ignored or unexecuted tests as passed acceptance evidence. Foundation tests MUST NOT establish full-system completion.
 - Agents MUST keep native, packaging, performance, and independent-recovery evidence separate. Publication, primary-branch updates, and deployment remain outside the approved implementation-branch authority.

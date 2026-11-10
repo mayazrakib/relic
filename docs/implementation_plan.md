@@ -28,6 +28,8 @@ Each task has dependencies, concrete acceptance criteria, source fingerprints, a
 
 Use the test deadlines in the ledger, deterministic fixtures, and separate evidence for native execution, cross-compilation, packaging, performance, and recovery. Limit optimization to three measured candidates per subsystem, with explicit keep-or-revert decisions. A full completion claim requires every mandatory gate and selected profile to pass.
 
+Local heavy commands use the verified 1 GiB maximum, 768 MiB pressure threshold, zero-swap guard in `tools/check.py`, with one compiler job and one test thread. Implementation concurrency is limited to one worker alongside the coordinator. These tighter host limits supersede the original 2 GiB development envelope and do not waive any acceptance gate.
+
 ## 5. Publication Boundary
 
 Use tested local milestone commits and CI pushes only on `implementation/relic-full-system`. Preserve `master`. Merging, tagging, release publication, and deployment require separate instructions. Imaging tests use only disposable media; bootable bare-metal recovery is excluded.
