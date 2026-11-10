@@ -53,6 +53,7 @@ pub struct GatewayExecutionRecord {
     pub fence_generation: u64,
     pub effect_state: String,
     pub native_result_id: Option<String>,
+    pub worker_identity: Option<crate::worker_identity::WorkerIdentity>,
 }
 fn is_identifier(value: &str) -> bool {
     valid_identifier_text(value)
@@ -122,9 +123,17 @@ fn read_execution(
     id: &str,
     ordinal: u32,
 ) -> Result<Option<GatewayExecutionRecord>, StateError> {
-    let row: Option<(String,String,String,String,Option<String>)> = connection.query_row("SELECT resource_id,receiver_epoch,fence_generation,effect_state,native_result_id FROM gateway_executions WHERE admission_id=?1 AND ordinal=?2", params![id,ordinal], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional()?;
+    type ExecutionRow = (
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+    );
+    let row: Option<ExecutionRow> = connection.query_row("SELECT resource_id,receiver_epoch,fence_generation,effect_state,native_result_id,worker_identity FROM gateway_executions WHERE admission_id=?1 AND ordinal=?2", params![id,ordinal], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).optional()?;
     row.map(
-        |(resource_id, epoch, fence, effect_state, native_result_id)| {
+        |(resource_id, epoch, fence, effect_state, native_result_id, worker_identity)| {
             Ok(GatewayExecutionRecord {
                 admission_id: id.into(),
                 ordinal,
@@ -133,6 +142,10 @@ fn read_execution(
                 fence_generation: parse_counter(&fence)?,
                 effect_state,
                 native_result_id,
+                worker_identity: worker_identity
+                    .as_deref()
+                    .map(serde_json::from_str)
+                    .transpose()?,
             })
         },
     )
@@ -202,6 +215,16 @@ impl StateStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let old = read_resource(&tx, id)?.ok_or(StateError::EffectConflict)?;
         check_epoch(&old, epoch, fence)?;
+        let layout_state: Option<String> = tx
+            .query_row(
+                "SELECT effect_state FROM gateway_layouts WHERE resource_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if layout_state.is_some_and(|state| state != "initialized") {
+            return Err(StateError::EffectConflict);
+        }
         if old.effect_state == "ready" {
             if old.repository_id.as_deref() != Some(repository_id) {
                 return Err(StateError::IdempotencyConflict);
@@ -416,6 +439,43 @@ impl StateStore {
         tx.commit()?;
         Ok(result)
     }
+    /// Bind the sole mutating process scope before its first fork; immutable for this execution.
+    pub fn bind_gateway_execution_worker(
+        &mut self,
+        id: &str,
+        ordinal: u32,
+        epoch: u64,
+        fence: u64,
+        identity: &crate::worker_identity::WorkerIdentity,
+    ) -> Result<GatewayExecutionRecord, StateError> {
+        let encoded = serde_json::to_string(identity)?;
+        if encoded.len() > 16384 {
+            return Err(StateError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let old = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
+        let resource = read_resource(&tx, &old.resource_id)?.ok_or(StateError::EffectConflict)?;
+        check_epoch(&resource, epoch, fence)?;
+        if old.effect_state != "active"
+            || old.receiver_epoch != epoch
+            || old.fence_generation != fence
+        {
+            return Err(StateError::EffectConflict);
+        }
+        if let Some(previous) = &old.worker_identity {
+            if previous != identity {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else {
+            tx.execute("UPDATE gateway_executions SET worker_identity=?1 WHERE admission_id=?2 AND ordinal=?3",params![encoded,id,ordinal])?;
+        }
+        let result = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
     /// Caller supplies independently established native result or proof of no effect.
     pub fn transition_gateway_execution(
         &mut self,

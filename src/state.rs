@@ -14,7 +14,7 @@ use crate::staging_quota::{
 };
 
 const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
-const CURRENT_SCHEMA_VERSION: u32 = 9;
+const CURRENT_SCHEMA_VERSION: u32 = 10;
 
 #[derive(Debug)]
 pub enum StateError {
@@ -576,6 +576,12 @@ impl StateStore {
 
         if version <= 8 {
             transaction.execute_batch(include_str!("../database/migrations/00009_gateway.sql"))?;
+        }
+
+        if version <= 9 {
+            transaction.execute_batch(include_str!(
+                "../database/migrations/00010_gateway_layout.sql"
+            ))?;
         }
 
         transaction.commit()?;

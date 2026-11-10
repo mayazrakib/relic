@@ -72,13 +72,40 @@ fn sibling_scopes_are_emitted_only_with_sufficient_mount_evidence() {
     match get_disjoint_scope_evidence(&[&left_endpoint, &right_endpoint]) {
         Ok(scopes) => {
             assert!(left_endpoint.mount_id().is_some());
-            assert_eq!(left_endpoint.mount_id(), right_endpoint.mount_id());
             assert_ne!(scopes[0].domain, scopes[1].domain);
         }
-        Err(EndpointError::AMBIGUOUS_SCOPE) => assert!(
-            left_endpoint.mount_id().is_none()
-                || left_endpoint.mount_id() != right_endpoint.mount_id()
-        ),
+        Err(EndpointError::AMBIGUOUS_SCOPE) => {}
         Err(error) => panic!("unexpected endpoint error: {error}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn native_temp_and_test_binary_directory_can_be_proven_disjoint() {
+    use std::os::fd::AsRawFd;
+    fn is_supported(endpoint: &LocalEndpoint) -> bool {
+        let mut value = std::mem::MaybeUninit::<libc::statfs>::uninit();
+        // SAFETY: endpoint descriptor is live and output storage is writable.
+        if unsafe { libc::fstatfs(endpoint.directory().as_raw_fd(), value.as_mut_ptr()) } != 0 {
+            return false;
+        }
+        // SAFETY: successful fstatfs initialized value.
+        matches!(
+            unsafe { value.assume_init() }.f_type,
+            0xef53 | 0x9123683e | 0x58465342
+        )
+    }
+    let temporary = tempfile::tempdir().unwrap();
+    let binary = std::env::current_exe().unwrap();
+    let binary_dir = binary.parent().unwrap();
+    let left = LocalEndpoint::resolve(temporary.path(), get_identity(temporary.path())).unwrap();
+    let right = LocalEndpoint::resolve(binary_dir, get_identity(binary_dir)).unwrap();
+    if is_supported(&left)
+        && is_supported(&right)
+        && left.mount_id().is_some()
+        && right.mount_id().is_some()
+    {
+        let scopes = get_disjoint_scope_evidence(&[&left, &right]).unwrap();
+        assert_ne!(scopes[0].domain, scopes[1].domain);
     }
 }

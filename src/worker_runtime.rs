@@ -76,6 +76,7 @@ mod linux {
     use std::fs::{self, File, OpenOptions};
     use std::io::{self, Read, Write};
     use std::os::fd::{AsRawFd, RawFd};
+    use std::os::unix::fs::{FileExt, MetadataExt};
     use std::os::unix::process::CommandExt;
     use std::path::{Component, Path, PathBuf};
     use std::process::{Child, ChildStdin, Command, Stdio};
@@ -86,6 +87,7 @@ mod linux {
 
     use super::{WorkerError, WorkerLimits, WorkerOutput, WorkerStop, WorkerStopReason};
     use crate::resources::{ResourceError, StageGuard};
+    use crate::worker_identity::WorkerIdentity;
     use crate::worker_sandbox::WorkerSandbox;
 
     const MIB: u64 = 1024 * 1024;
@@ -174,6 +176,431 @@ mod linux {
         Ok(path)
     }
 
+    // This is a local continuity marker, not attestation; cloned machine IDs
+    // must not be used concurrently as independent hosts.
+    fn get_host_id() -> Result<String, WorkerError> {
+        use sha2::{Digest, Sha256};
+        let file = File::open("/etc/machine-id").map_err(|_| WorkerError::UNSUPPORTED)?;
+        let mut input = Vec::with_capacity(34);
+        file.take(34)
+            .read_to_end(&mut input)
+            .map_err(|_| WorkerError::UNSUPPORTED)?;
+        if input.len() != 32 && !(input.len() == 33 && input[32] == b'\n') {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let id = &input[..32];
+        if !id
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+            || id.iter().all(|byte| *byte == b'0')
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let mut digest = Sha256::new();
+        digest.update(b"relic/worker-host/v1\0");
+        digest.update(id);
+        let encoded: String = digest
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        Ok(format!("sha256:{encoded}"))
+    }
+
+    fn get_boot_id() -> Result<String, WorkerError> {
+        let value = fs::read_to_string("/proc/sys/kernel/random/boot_id")
+            .map_err(|_| WorkerError::UNSUPPORTED)?;
+        let text = value.trim();
+        let parsed = uuid::Uuid::parse_str(text).map_err(|_| WorkerError::UNSUPPORTED)?;
+        if parsed.to_string() != text {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        Ok(text.to_owned())
+    }
+
+    fn get_namespace_inode() -> Result<u64, WorkerError> {
+        let value = fs::metadata("/proc/self/ns/cgroup")
+            .map_err(|_| WorkerError::UNSUPPORTED)?
+            .ino();
+        if value == 0 {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        Ok(value)
+    }
+
+    fn get_cgroup_relative(path: &Path) -> Result<String, WorkerError> {
+        let relative = path
+            .strip_prefix("/sys/fs/cgroup")
+            .map_err(|_| WorkerError::UNSUPPORTED)?;
+        let path = Path::new("/").join(relative);
+        if path
+            .components()
+            .any(|part| !matches!(part, Component::RootDir | Component::Normal(_)))
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        path.to_str()
+            .map(str::to_owned)
+            .ok_or(WorkerError::UNSUPPORTED)
+    }
+
+    fn validate_worker_path(group: &str, parent: &str) -> Result<(), WorkerError> {
+        let group = Path::new(group);
+        let parent = Path::new(parent);
+        for path in [group, parent] {
+            let mut canonical = PathBuf::new();
+            for component in path.components() {
+                canonical.push(component.as_os_str());
+            }
+            if canonical.as_os_str() != path.as_os_str() {
+                return Err(WorkerError::UNSUPPORTED);
+            }
+            if !path.is_absolute()
+                || path
+                    .components()
+                    .any(|part| !matches!(part, Component::RootDir | Component::Normal(_)))
+                || path.to_str().is_none_or(|text| text.len() > 4096)
+            {
+                return Err(WorkerError::UNSUPPORTED);
+            }
+        }
+        if group.parent() != Some(parent) {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let name = group
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(WorkerError::UNSUPPORTED)?;
+        let suffix = name
+            .strip_prefix("worker_")
+            .ok_or(WorkerError::UNSUPPORTED)?;
+        if suffix.len() != 32
+            || !suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        Ok(())
+    }
+
+    fn check_cgroup_directory(directory: &File) -> Result<(), WorkerError> {
+        let metadata = directory.metadata().map_err(|_| WorkerError::UNSUPPORTED)?;
+        // SAFETY: geteuid is a scalar identity query.
+        if !metadata.is_dir() || metadata.uid() != unsafe { libc::geteuid() } {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let mut info = std::mem::MaybeUninit::<libc::statfs>::uninit();
+        // SAFETY: directory is live and info is writable.
+        if unsafe { libc::fstatfs(directory.as_raw_fd(), info.as_mut_ptr()) } != 0 {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        // SAFETY: successful fstatfs initialized info.
+        if unsafe { info.assume_init() }.f_type != CGROUP2_MAGIC {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        Ok(())
+    }
+
+    fn open_directory_nofollow(path: &Path) -> Result<File, WorkerError> {
+        use std::os::fd::FromRawFd;
+        use std::os::unix::ffi::OsStrExt;
+        let text = std::ffi::CString::new(path.as_os_str().as_bytes())
+            .map_err(|_| WorkerError::UNSUPPORTED)?;
+        // SAFETY: path is NUL-terminated and flags prevent final symlink traversal.
+        let fd = unsafe {
+            libc::open(
+                text.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        // SAFETY: fd is newly owned.
+        let file = unsafe { File::from_raw_fd(fd) };
+        check_cgroup_directory(&file)?;
+        Ok(file)
+    }
+
+    fn get_group_identity(path: &Path) -> Result<WorkerIdentity, WorkerError> {
+        let parent = path.parent().ok_or(WorkerError::UNSUPPORTED)?;
+        let group_path = get_cgroup_relative(path)?;
+        let parent_path = get_cgroup_relative(parent)?;
+        validate_worker_path(&group_path, &parent_path)?;
+        let membership = get_membership()?;
+        if membership != path
+            && !(membership
+                .file_name()
+                .is_some_and(|name| name == "supervisor")
+                && membership.parent() == Some(parent))
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let group = open_directory_nofollow(path)?;
+        let parent = open_directory_nofollow(parent)?;
+        Ok(WorkerIdentity {
+            host_id: get_host_id()?,
+            boot_id: get_boot_id()?,
+            cgroup_namespace_inode: get_namespace_inode()?,
+            group_path,
+            group_inode: group
+                .metadata()
+                .map_err(|_| WorkerError::UNSUPPORTED)?
+                .ino(),
+            parent_path,
+            parent_inode: parent
+                .metadata()
+                .map_err(|_| WorkerError::UNSUPPORTED)?
+                .ino(),
+        })
+    }
+
+    pub fn get_current_worker_identity() -> Result<WorkerIdentity, WorkerError> {
+        get_group_identity(&get_membership()?)
+    }
+
+    pub fn verify_current_worker_identity(expected: &WorkerIdentity) -> Result<(), WorkerError> {
+        if &get_current_worker_identity()? != expected {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        Ok(())
+    }
+
+    fn prove_removed_original(
+        parent: &File,
+        name: &std::ffi::CStr,
+        original: &File,
+        events: Option<&File>,
+    ) -> Result<bool, WorkerError> {
+        let is_offline = if let Some(events) = events {
+            let mut probe = [0u8; 1];
+            match events.read_at(&mut probe, 0) {
+                Err(error) if error.raw_os_error() == Some(libc::ENODEV) => true,
+                Ok(_) => false,
+                Err(_) => return Err(WorkerError::UNSUPPORTED),
+            }
+        } else {
+            original
+                .metadata()
+                .map_err(|_| WorkerError::UNSUPPORTED)?
+                .nlink()
+                == 0
+        };
+        if !is_offline {
+            return Ok(false);
+        }
+        let mut slot = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: parent, single component and output storage are live.
+        if unsafe {
+            libc::fstatat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                slot.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } == 0
+        {
+            // Any replacement or unexpected surviving name is not proof of absence.
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        match std::io::Error::last_os_error().kind() {
+            std::io::ErrorKind::NotFound => Ok(true),
+            _ => Err(WorkerError::UNSUPPORTED),
+        }
+    }
+
+    /// Quiescence after a boot change only proves local processes and cgroup handles
+    /// cannot survive under the exclusive local-filesystem/no-migration assumption;
+    /// it is not proof about remote storage, quorum replacement, or cloned host IDs.
+    /// Same-boot absent paths assume the delegated scope cannot be renamed or migrated
+    /// by workers and no external controller recreates its UUID names.
+    pub fn quiesce_recorded_worker(
+        identity: &WorkerIdentity,
+        guard: &StageGuard,
+    ) -> Result<bool, WorkerError> {
+        use std::os::fd::FromRawFd;
+        validate_worker_path(&identity.group_path, &identity.parent_path)?;
+        if identity.group_inode == 0
+            || identity.parent_inode == 0
+            || identity.cgroup_namespace_inode == 0
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let recorded_boot =
+            uuid::Uuid::parse_str(&identity.boot_id).map_err(|_| WorkerError::UNSUPPORTED)?;
+        if recorded_boot.to_string() != identity.boot_id {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        guard.check().map_err(|_| WorkerError::CANCELED)?;
+        if get_host_id()? != identity.host_id {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        if get_boot_id()? != identity.boot_id {
+            return Ok(true);
+        }
+        if get_namespace_inode()? != identity.cgroup_namespace_inode {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let membership = get_membership()?;
+        if membership
+            .file_name()
+            .is_none_or(|name| name != "supervisor")
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let parent_path = membership.parent().ok_or(WorkerError::UNSUPPORTED)?;
+        if get_cgroup_relative(parent_path)? != identity.parent_path {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        let parent = open_directory_nofollow(parent_path)?;
+        let name = Path::new(&identity.group_path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or(WorkerError::UNSUPPORTED)?;
+        let name = std::ffi::CString::new(name).map_err(|_| WorkerError::UNSUPPORTED)?;
+        // SAFETY: parent and NUL-terminated single component are valid.
+        let fd = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::NotFound {
+                return Ok(true);
+            }
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        // SAFETY: fd is newly owned.
+        let group = unsafe { File::from_raw_fd(fd) };
+        check_cgroup_directory(&group)?;
+        let group_metadata = group.metadata().map_err(|_| WorkerError::UNSUPPORTED)?;
+        let parent_metadata = parent.metadata().map_err(|_| WorkerError::UNSUPPORTED)?;
+        if parent_metadata.ino() != identity.parent_inode
+            || group_metadata.ino() != identity.group_inode
+            || group_metadata.dev() != parent_metadata.dev()
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        // Open events before kill so concurrent removal can be proved against the original kernfs node.
+        // SAFETY: group is pinned and the name is a fixed component.
+        let events_fd = unsafe {
+            libc::openat(
+                group.as_raw_fd(),
+                c"cgroup.events".as_ptr(),
+                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if events_fd < 0 {
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::NotFound {
+                return prove_removed_original(&parent, &name, &group, None);
+            }
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        // SAFETY: events_fd is newly owned.
+        let events = unsafe { File::from_raw_fd(events_fd) };
+        // SAFETY: group is pinned, component is fixed, and no-follow rejects symlinks.
+        let kill_fd = unsafe {
+            libc::openat(
+                group.as_raw_fd(),
+                c"cgroup.kill".as_ptr(),
+                libc::O_WRONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if kill_fd < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::NotFound
+                || error.raw_os_error() == Some(libc::ENODEV)
+            {
+                return prove_removed_original(&parent, &name, &group, Some(&events));
+            }
+            return Ok(false);
+        }
+        // SAFETY: kill_fd is newly owned.
+        let mut kill = unsafe { File::from_raw_fd(kill_fd) };
+        if let Err(error) = kill.write_all(b"1") {
+            if error.kind() == std::io::ErrorKind::NotFound
+                || error.raw_os_error() == Some(libc::ENODEV)
+            {
+                return prove_removed_original(&parent, &name, &group, Some(&events));
+            }
+            return Ok(false);
+        }
+        let deadline = Instant::now() + REAP_TIMEOUT;
+        loop {
+            guard.check().map_err(|_| WorkerError::CANCELED)?;
+            let mut bytes = [0u8; 512];
+            let count = match events.read_at(&mut bytes, 0) {
+                Ok(count) => count,
+                Err(error) if error.raw_os_error() == Some(libc::ENODEV) => {
+                    return prove_removed_original(&parent, &name, &group, Some(&events));
+                }
+                Err(_) => return Err(WorkerError::UNSUPPORTED),
+            };
+            if count == bytes.len() {
+                return Err(WorkerError::UNSUPPORTED);
+            }
+            let text =
+                std::str::from_utf8(&bytes[..count]).map_err(|_| WorkerError::UNSUPPORTED)?;
+            match parse_event_counter(text, "populated")? {
+                0 => break,
+                1 if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
+                1 => return Ok(false),
+                _ => return Err(WorkerError::UNSUPPORTED),
+            }
+        }
+        let mut slot = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: parent, component and writable output storage are live.
+        if unsafe {
+            libc::fstatat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                slot.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } != 0
+        {
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::NotFound {
+                return prove_removed_original(&parent, &name, &group, Some(&events));
+            }
+            return Ok(false);
+        }
+        // SAFETY: successful fstatat initialized slot.
+        let slot = unsafe { slot.assume_init() };
+        if slot.st_ino != identity.group_inode
+            || slot.st_dev != parent_metadata.dev()
+            || slot.st_mode & libc::S_IFMT != libc::S_IFDIR
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        // SAFETY: parent and fixed generated component are live.
+        if unsafe { libc::unlinkat(parent.as_raw_fd(), name.as_ptr(), libc::AT_REMOVEDIR) } != 0 {
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::NotFound {
+                return prove_removed_original(&parent, &name, &group, Some(&events));
+            }
+            return Ok(false);
+        }
+        let mut removed_slot = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: parent, component and output storage remain live.
+        if unsafe {
+            libc::fstatat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                removed_slot.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } == 0
+        {
+            return Err(WorkerError::UNSUPPORTED);
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::NotFound {
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
     fn check_parent(path: &Path) -> Result<(), WorkerError> {
         if read_counter(&path.join("memory.max"))? > MAX_PARENT_MEMORY_BYTES
             || read_counter(&path.join("memory.high"))? > MAX_PARENT_HIGH_BYTES
@@ -242,6 +669,8 @@ mod linux {
 
     struct WorkerGroup {
         path: PathBuf,
+        directory: File,
+        events: File,
     }
 
     impl WorkerGroup {
@@ -257,7 +686,32 @@ mod linux {
             check_parent(parent)?;
             let path = parent.join(format!("worker_{}", uuid::Uuid::now_v7().simple()));
             fs::create_dir(&path).map_err(|_| WorkerError::UNSUPPORTED)?;
-            let group = Self { path };
+            let directory = match open_directory_nofollow(&path) {
+                Ok(directory) => directory,
+                Err(error) => {
+                    let _ = fs::remove_dir(&path);
+                    return Err(error);
+                }
+            };
+            // SAFETY: directory is pinned and the event name is a fixed component.
+            let fd = unsafe {
+                libc::openat(
+                    directory.as_raw_fd(),
+                    c"cgroup.events".as_ptr(),
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if fd < 0 {
+                let _ = fs::remove_dir(&path);
+                return Err(WorkerError::UNSUPPORTED);
+            }
+            // SAFETY: fd is newly owned and close-on-exec.
+            let events = unsafe { std::os::fd::FromRawFd::from_raw_fd(fd) };
+            let group = Self {
+                path,
+                directory,
+                events,
+            };
             for (name, value) in [
                 ("memory.max", limits.memory_max_bytes),
                 ("memory.high", limits.memory_high_bytes),
@@ -277,9 +731,18 @@ mod linux {
         }
 
         fn is_populated(&self) -> Result<bool, WorkerError> {
-            let text = fs::read_to_string(self.path.join("cgroup.events"))
-                .map_err(|_| WorkerError::UNSUPPORTED)?;
-            match parse_event_counter(&text, "populated")? {
+            let mut bytes = [0u8; 256];
+            let count = match self.events.read_at(&mut bytes, 0) {
+                Ok(count) => count,
+                Err(error) if error.raw_os_error() == Some(libc::ENODEV) => return Ok(false),
+                Err(_) => return Err(WorkerError::UNSUPPORTED),
+            };
+            if count == bytes.len() {
+                return Err(WorkerError::UNSUPPORTED);
+            }
+            let text =
+                std::str::from_utf8(&bytes[..count]).map_err(|_| WorkerError::UNSUPPORTED)?;
+            match parse_event_counter(text, "populated")? {
                 0 => Ok(false),
                 1 => Ok(true),
                 _ => Err(WorkerError::UNSUPPORTED),
@@ -287,7 +750,20 @@ mod linux {
         }
 
         fn kill(&self) {
-            let _ = fs::write(self.path.join("cgroup.kill"), "1");
+            use std::os::fd::FromRawFd;
+            // SAFETY: directory is pinned to the original scope and name is fixed.
+            let fd = unsafe {
+                libc::openat(
+                    self.directory.as_raw_fd(),
+                    c"cgroup.kill".as_ptr(),
+                    libc::O_WRONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if fd >= 0 {
+                // SAFETY: fd is newly owned.
+                let mut file = unsafe { File::from_raw_fd(fd) };
+                let _ = file.write_all(b"1");
+            }
         }
 
         fn get_peak_bytes(&self) -> Result<u64, WorkerError> {
@@ -326,7 +802,16 @@ mod linux {
                 self.kill();
             }
             if matches!(self.is_populated(), Ok(false)) {
-                let _ = fs::remove_dir(&self.path);
+                let pinned = self.directory.metadata();
+                let slot = fs::symlink_metadata(&self.path);
+                if let (Ok(pinned), Ok(slot)) = (pinned, slot)
+                    && slot.is_dir()
+                    && !slot.file_type().is_symlink()
+                    && pinned.dev() == slot.dev()
+                    && pinned.ino() == slot.ino()
+                {
+                    let _ = fs::remove_dir(&self.path);
+                }
             }
         }
     }
@@ -603,6 +1088,29 @@ mod linux {
         limits: WorkerLimits,
         guard: &StageGuard,
     ) -> Result<WorkerOutput, WorkerError> {
+        execute_worker_recorded(
+            executable,
+            input,
+            read_paths,
+            write_paths,
+            limits,
+            guard,
+            |_| Ok(()),
+        )
+    }
+
+    pub fn execute_worker_recorded<F>(
+        executable: &Path,
+        input: &[u8],
+        read_paths: &[PathBuf],
+        write_paths: &[PathBuf],
+        limits: WorkerLimits,
+        guard: &StageGuard,
+        before_launch: F,
+    ) -> Result<WorkerOutput, WorkerError>
+    where
+        F: FnOnce(&WorkerIdentity) -> Result<(), WorkerError>,
+    {
         validate_limits(executable, input, limits)?;
         guard.check().map_err(|error| {
             if error == ResourceError::DEADLINE_EXCEEDED {
@@ -612,6 +1120,8 @@ mod linux {
             }
         })?;
         let group = WorkerGroup::create(limits)?;
+        let identity = get_group_identity(&group.path)?;
+        before_launch(&identity)?;
         guard.check().map_err(|error| {
             if error == ResourceError::DEADLINE_EXCEEDED {
                 WorkerError::DEADLINE
@@ -717,7 +1227,37 @@ mod linux {
     }
     #[cfg(test)]
     mod tests {
-        use super::parse_event_counter;
+        use super::{parse_event_counter, prove_removed_original, validate_worker_path};
+
+        #[test]
+        fn removed_original_proof_rejects_a_replacement_path() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("scope");
+            std::fs::create_dir(&path).unwrap();
+            let parent = std::fs::File::open(directory.path()).unwrap();
+            let original = std::fs::File::open(&path).unwrap();
+            assert!(!prove_removed_original(&parent, c"scope", &original, None).unwrap());
+            std::fs::remove_dir(&path).unwrap();
+            assert!(prove_removed_original(&parent, c"scope", &original, None).unwrap());
+            std::fs::create_dir(&path).unwrap();
+            assert!(prove_removed_original(&parent, c"scope", &original, None).is_err());
+        }
+
+        #[test]
+        fn accepts_only_canonical_worker_group_paths() {
+            let name = format!("worker_{}", "a".repeat(32));
+            assert!(validate_worker_path(&format!("/scope/{name}"), "/scope").is_ok());
+            for group in [
+                format!("/scope/./{name}"),
+                format!("/scope//{name}"),
+                format!("/scope/{name}/x"),
+                "/scope/worker_bad".into(),
+                format!("/scope/worker_{}", "A".repeat(32)),
+            ] {
+                assert!(validate_worker_path(&group, "/scope").is_err());
+            }
+            assert!(validate_worker_path(&format!("/scope/{name}"), "/other").is_err());
+        }
 
         #[test]
         fn rejects_missing_malformed_and_duplicate_kernel_evidence() {
@@ -743,7 +1283,11 @@ mod linux {
 }
 
 #[cfg(target_os = "linux")]
-pub use linux::{PendingWorker, execute_worker, prepare_worker_process, verify_worker_envelope};
+pub use linux::{
+    PendingWorker, execute_worker, execute_worker_recorded, get_current_worker_identity,
+    prepare_worker_process, quiesce_recorded_worker, verify_current_worker_identity,
+    verify_worker_envelope,
+};
 
 #[cfg(not(target_os = "linux"))]
 pub fn verify_worker_envelope(_memory_max_bytes: u64) -> Result<(), WorkerError> {
@@ -764,5 +1308,42 @@ pub fn execute_worker(
 
 #[cfg(not(target_os = "linux"))]
 pub fn prepare_worker_process() -> Result<(), WorkerError> {
+    Err(WorkerError::UNSUPPORTED)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn execute_worker_recorded<F>(
+    _executable: &Path,
+    _input: &[u8],
+    _read_paths: &[PathBuf],
+    _write_paths: &[PathBuf],
+    _limits: WorkerLimits,
+    _guard: &StageGuard,
+    _before_launch: F,
+) -> Result<WorkerOutput, WorkerError>
+where
+    F: FnOnce(&crate::worker_identity::WorkerIdentity) -> Result<(), WorkerError>,
+{
+    Err(WorkerError::UNSUPPORTED)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn get_current_worker_identity() -> Result<crate::worker_identity::WorkerIdentity, WorkerError>
+{
+    Err(WorkerError::UNSUPPORTED)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn verify_current_worker_identity(
+    _identity: &crate::worker_identity::WorkerIdentity,
+) -> Result<(), WorkerError> {
+    Err(WorkerError::UNSUPPORTED)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn quiesce_recorded_worker(
+    _identity: &crate::worker_identity::WorkerIdentity,
+    _guard: &StageGuard,
+) -> Result<bool, WorkerError> {
     Err(WorkerError::UNSUPPORTED)
 }

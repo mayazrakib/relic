@@ -170,6 +170,183 @@ mod unix {
         None
     }
 
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    struct MountEntry {
+        id: u64,
+        major: u32,
+        minor: u32,
+        root: Vec<Vec<u8>>,
+        mountpoint: Vec<Vec<u8>>,
+        native: bool,
+    }
+
+    #[cfg(target_os = "linux")]
+    fn decode_mount_path(input: &[u8]) -> Result<Vec<Vec<u8>>, EndpointError> {
+        let mut decoded = Vec::with_capacity(input.len());
+        let mut index = 0;
+        while index < input.len() {
+            if input[index] == b'\\' {
+                if index + 3 >= input.len() {
+                    return Err(EndpointError::AMBIGUOUS_SCOPE);
+                }
+                let escaped = &input[index + 1..index + 4];
+                decoded.push(match escaped {
+                    b"040" => b' ',
+                    b"011" => b'\t',
+                    b"012" => b'\n',
+                    b"134" => b'\\',
+                    _ => return Err(EndpointError::AMBIGUOUS_SCOPE),
+                });
+                index += 4;
+            } else {
+                if input[index] == 0 {
+                    return Err(EndpointError::AMBIGUOUS_SCOPE);
+                }
+                decoded.push(input[index]);
+                index += 1;
+            }
+        }
+        if decoded.first() != Some(&b'/') {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        let mut result = Vec::new();
+        if decoded.len() == 1 {
+            return Ok(result);
+        }
+        for component in decoded[1..].split(|byte| *byte == b'/') {
+            if component.is_empty() || component == b"." || component == b".." {
+                return Err(EndpointError::AMBIGUOUS_SCOPE);
+            }
+            result.push(component.to_vec());
+        }
+        Ok(result)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn parse_mountinfo(data: &[u8]) -> Result<Vec<MountEntry>, EndpointError> {
+        if data.len() > 512 * 1024 {
+            return Err(EndpointError::LIMIT_EXCEEDED);
+        }
+        let mut result = Vec::new();
+        for line in data
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+        {
+            if result.len() >= 4096 {
+                return Err(EndpointError::LIMIT_EXCEEDED);
+            }
+            let fields: Vec<&[u8]> = line.split(|byte| *byte == b' ').collect();
+            let separator = fields
+                .iter()
+                .position(|field| *field == b"-")
+                .ok_or(EndpointError::AMBIGUOUS_SCOPE)?;
+            if separator < 6
+                || fields.len() < separator + 4
+                || fields.iter().any(|field| field.is_empty())
+            {
+                return Err(EndpointError::AMBIGUOUS_SCOPE);
+            }
+            let parse = |value: &[u8]| -> Result<u64, EndpointError> {
+                let text =
+                    std::str::from_utf8(value).map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+                let n = text
+                    .parse::<u64>()
+                    .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+                if n.to_string() != text {
+                    return Err(EndpointError::AMBIGUOUS_SCOPE);
+                }
+                Ok(n)
+            };
+            let id = parse(fields[0])?;
+            let _parent = parse(fields[1])?;
+            let device = fields[2];
+            let colon = device
+                .iter()
+                .position(|byte| *byte == b':')
+                .ok_or(EndpointError::AMBIGUOUS_SCOPE)?;
+            let major = u32::try_from(parse(&device[..colon])?)
+                .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+            let minor = u32::try_from(parse(&device[colon + 1..])?)
+                .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+            if id == 0 || result.iter().any(|entry: &MountEntry| entry.id == id) {
+                return Err(EndpointError::AMBIGUOUS_SCOPE);
+            }
+            result.push(MountEntry {
+                id,
+                major,
+                minor,
+                root: decode_mount_path(fields[3])?,
+                mountpoint: decode_mount_path(fields[4])?,
+                native: matches!(fields[separator + 1], b"ext4" | b"btrfs" | b"xfs"),
+            });
+        }
+        if result.is_empty() {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        Ok(result)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_mountinfo() -> Result<Vec<u8>, EndpointError> {
+        use std::io::Read;
+        let file =
+            File::open("/proc/self/mountinfo").map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        let mut result = Vec::new();
+        file.take(512 * 1024 + 1)
+            .read_to_end(&mut result)
+            .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        if result.len() > 512 * 1024 {
+            return Err(EndpointError::LIMIT_EXCEEDED);
+        }
+        Ok(result)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_mount_origin(
+        id: u64,
+        device: u64,
+        namespace: &[Vec<u8>],
+        mounts: &[MountEntry],
+    ) -> Result<Vec<Vec<u8>>, EndpointError> {
+        let selected = mounts
+            .iter()
+            .find(|mount| mount.id == id)
+            .ok_or(EndpointError::AMBIGUOUS_SCOPE)?;
+        if !selected.native
+            || libc::major(device) != selected.major
+            || libc::minor(device) != selected.minor
+        {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        if !namespace.starts_with(&selected.mountpoint) {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        if mounts
+            .iter()
+            .any(|mount| mount.id != id && mount.mountpoint.starts_with(namespace))
+        {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        let mut origin = selected.root.clone();
+        origin.extend_from_slice(&namespace[selected.mountpoint.len()..]);
+        Ok(origin)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_origin(
+        endpoint: &LocalEndpoint,
+        mounts: &[MountEntry],
+    ) -> Result<Vec<Vec<u8>>, EndpointError> {
+        let id = endpoint.mount_id.ok_or(EndpointError::AMBIGUOUS_SCOPE)?;
+        let namespace: Vec<Vec<u8>> = endpoint
+            .names
+            .iter()
+            .map(|name| name.as_bytes().to_vec())
+            .collect();
+        get_mount_origin(id, endpoint.identity().device, &namespace, mounts)
+    }
+
     impl LocalEndpoint {
         pub fn resolve(path: &Path, expected: FileIdentity) -> Result<Self, EndpointError> {
             if !path.is_absolute() {
@@ -347,10 +524,42 @@ mod unix {
                 {
                     return Err(EndpointError::OVERLAP);
                 }
-                if left.mount_id.is_none() || left.mount_id != right.mount_id {
-                    return Err(EndpointError::AMBIGUOUS_SCOPE);
+            }
+        }
+        #[cfg(target_os = "linux")]
+        let (mount_snapshot, origins) = {
+            let snapshot = read_mountinfo()?;
+            let mounts = parse_mountinfo(&snapshot)?;
+            let origins: Vec<Vec<Vec<u8>>> = endpoints
+                .iter()
+                .map(|endpoint| get_origin(endpoint, &mounts))
+                .collect::<Result<_, _>>()?;
+            (snapshot, origins)
+        };
+        for (index, left) in endpoints.iter().enumerate() {
+            for (offset, right) in endpoints[index + 1..].iter().enumerate() {
+                #[cfg(target_os = "linux")]
+                {
+                    if left.identity().device == right.identity().device {
+                        let a = &origins[index];
+                        let b = &origins[index + 1 + offset];
+                        if a.starts_with(b) || b.starts_with(a) {
+                            return Err(EndpointError::OVERLAP);
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    let _ = offset;
+                    if left.mount_id.is_none() || left.mount_id != right.mount_id {
+                        return Err(EndpointError::AMBIGUOUS_SCOPE);
+                    }
                 }
             }
+        }
+        #[cfg(target_os = "linux")]
+        if read_mountinfo()? != mount_snapshot {
+            return Err(EndpointError::IDENTITY_CHANGED);
         }
         let scopes = endpoints
             .iter()
@@ -366,6 +575,48 @@ mod unix {
             endpoint.revalidate()?;
         }
         Ok(scopes)
+    }
+    #[cfg(all(test, target_os = "linux"))]
+    mod tests {
+        use super::{decode_mount_path, get_mount_origin, parse_mountinfo};
+        use crate::local_endpoint::EndpointError;
+
+        #[test]
+        fn mount_parser_decodes_kernel_escapes_and_rejects_bad_input() {
+            assert_eq!(
+                decode_mount_path(br"/space\040name/back\134slash").unwrap(),
+                vec![b"space name".to_vec(), b"back\\slash".to_vec()]
+            );
+            assert!(decode_mount_path(br"/bad\777").is_err());
+            assert!(parse_mountinfo(b"bad input\n").is_err());
+            assert!(matches!(
+                parse_mountinfo(&vec![b'x'; 512 * 1024 + 1]),
+                Err(EndpointError::LIMIT_EXCEEDED)
+            ));
+        }
+
+        #[test]
+        fn mount_origins_expose_hidden_bind_ancestor_and_missing_ids() {
+            let table = b"1 1 8:48 / / rw - ext4 /dev/root rw\n2 1 8:48 /source/deep /alias rw - ext4 /dev/root rw\n";
+            let mounts = parse_mountinfo(table).unwrap();
+            let device = libc::makedev(8, 48);
+            let source = get_mount_origin(1, device, &[b"source".to_vec()], &mounts).unwrap();
+            let alias = get_mount_origin(2, device, &[b"alias".to_vec()], &mounts).unwrap();
+            assert!(alias.starts_with(&source));
+            assert!(get_mount_origin(3, device, &[b"alias".to_vec()], &mounts).is_err());
+            assert!(
+                get_mount_origin(2, libc::makedev(8, 49), &[b"alias".to_vec()], &mounts).is_err()
+            );
+        }
+
+        #[test]
+        fn refuses_nested_mount_under_owned_root() {
+            let table = b"1 1 8:48 / / rw - ext4 /dev/root rw\n2 1 8:48 /foreign /source/nested rw - ext4 /dev/root rw\n";
+            let mounts = parse_mountinfo(table).unwrap();
+            assert!(
+                get_mount_origin(1, libc::makedev(8, 48), &[b"source".to_vec()], &mounts).is_err()
+            );
+        }
     }
 }
 

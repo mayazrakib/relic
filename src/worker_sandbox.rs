@@ -236,6 +236,8 @@ impl WorkerSandbox {
             "/etc/nsswitch.conf",
             "/etc/passwd",
             "/etc/group",
+            "/etc/machine-id",
+            "/proc/sys/kernel/random/boot_id",
             "/dev/urandom",
             "/dev/random",
             "/sys/fs/cgroup",

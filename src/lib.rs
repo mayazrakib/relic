@@ -19,7 +19,12 @@ pub mod domain;
 pub mod embedded_archive;
 pub mod encrypted_manifest_sort;
 pub mod encrypted_spool;
+pub mod gateway_layout;
 pub mod gateway_state;
+#[cfg(all(feature = "embedded-archive", target_os = "linux"))]
+pub mod gateway_store;
+#[cfg(all(feature = "embedded-archive", target_os = "linux"))]
+pub mod gateway_worker;
 pub mod identity;
 pub mod local_endpoint;
 pub mod manifest;
@@ -37,6 +42,7 @@ pub mod service;
 pub mod source_scan;
 pub mod staging_quota;
 pub mod state;
+pub mod worker_identity;
 pub mod worker_runtime;
 
 #[cfg(target_os = "linux")]

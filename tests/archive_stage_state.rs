@@ -236,7 +236,7 @@ fn migrates_existing_schema_five_to_current() {
     let connection = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; DROP TABLE native_runs; DROP TABLE archive_files; DROP TABLE archive_stages; PRAGMA user_version = 5;",
+            "DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; DROP TABLE native_runs; DROP TABLE archive_files; DROP TABLE archive_stages; PRAGMA user_version = 5;",
         )
         .unwrap();
     drop(connection);
@@ -247,5 +247,5 @@ fn migrates_existing_schema_five_to_current() {
     let version: u32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
 }
