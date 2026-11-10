@@ -1,4 +1,5 @@
 pub mod archive;
+pub mod artifact_store;
 pub mod config;
 pub mod contracts;
 pub mod domain;

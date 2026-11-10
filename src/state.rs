@@ -96,9 +96,39 @@ pub struct CaptureRecord {
     pub binding: CaptureBinding,
     pub manifest_digest: Option<String>,
     pub manifest_entry_count: Option<String>,
+    pub manifest_artifact_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManifestArtifactBinding {
+    pub artifact_id: String,
+    pub capture_id: String,
+    pub storage_endpoint_id: String,
+    pub storage_identity: String,
+    pub relative_name: String,
+    pub key_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManifestArtifactRecord {
+    pub binding: ManifestArtifactBinding,
+    pub effect_state: String,
+    pub ciphertext_digest: Option<String>,
+    pub ciphertext_bytes: Option<String>,
+    pub manifest_digest: Option<String>,
+    pub manifest_entry_count: Option<String>,
 }
 
 type PublicationRow = (String, String, String, Option<String>, Option<String>);
+type ArtifactSealRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
 
 pub struct StateStore {
     connection: Connection,
@@ -273,10 +303,21 @@ impl StateStore {
                     .execute_batch(include_str!("../database/migrations/00001_initialize.sql"))?;
                 transaction
                     .execute_batch(include_str!("../database/migrations/00002_capture.sql"))?;
+                transaction.execute_batch(include_str!(
+                    "../database/migrations/00003_manifest_artifacts.sql"
+                ))?;
             }
-            1 => transaction
-                .execute_batch(include_str!("../database/migrations/00002_capture.sql"))?,
-            2 => {}
+            1 => {
+                transaction
+                    .execute_batch(include_str!("../database/migrations/00002_capture.sql"))?;
+                transaction.execute_batch(include_str!(
+                    "../database/migrations/00003_manifest_artifacts.sql"
+                ))?;
+            }
+            2 => transaction.execute_batch(include_str!(
+                "../database/migrations/00003_manifest_artifacts.sql"
+            ))?,
+            3 => {}
             _ => return Err(StateError::UnsupportedVersion),
         }
 
@@ -504,8 +545,8 @@ impl StateStore {
     }
 
     pub fn get_capture(&self, capture_id: &str) -> Result<Option<CaptureRecord>, StateError> {
-        self.connection.query_row("SELECT authority_id, job_id, occurrence_id, capture_id, source_view_id, consistency, source_selection_digest, manifest_digest, manifest_entry_count FROM captures WHERE capture_id = ?1", [capture_id], |row| {
-            Ok(CaptureRecord { binding: CaptureBinding { authority_id: row.get(0)?, job_id: row.get(1)?, occurrence_id: row.get(2)?, capture_id: row.get(3)?, source_view_id: row.get(4)?, consistency: row.get(5)?, source_selection_digest: row.get(6)? }, manifest_digest: row.get(7)?, manifest_entry_count: row.get(8)? })
+        self.connection.query_row("SELECT authority_id, job_id, occurrence_id, capture_id, source_view_id, consistency, source_selection_digest, manifest_digest, manifest_entry_count, manifest_artifact_id FROM captures WHERE capture_id = ?1", [capture_id], |row| {
+            Ok(CaptureRecord { binding: CaptureBinding { authority_id: row.get(0)?, job_id: row.get(1)?, occurrence_id: row.get(2)?, capture_id: row.get(3)?, source_view_id: row.get(4)?, consistency: row.get(5)?, source_selection_digest: row.get(6)? }, manifest_digest: row.get(7)?, manifest_entry_count: row.get(8)?, manifest_artifact_id: row.get(9)? })
         }).optional().map_err(StateError::from)
     }
 
@@ -562,6 +603,181 @@ impl StateStore {
             records.push(self.get_capture(&row?)?.ok_or(StateError::EffectConflict)?);
         }
         Ok(records)
+    }
+
+    pub fn prepare_manifest_artifact(
+        &mut self,
+        binding: &ManifestArtifactBinding,
+    ) -> Result<ManifestArtifactRecord, StateError> {
+        validate_artifact_binding(binding)?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let existing: Option<(String, String, String, String, String, String, String)> = transaction.query_row(
+            "SELECT artifact_id, capture_id, storage_endpoint_id, storage_identity, relative_name, key_ref, effect_state FROM manifest_artifacts WHERE artifact_id = ?1 OR capture_id = ?2",
+            params![binding.artifact_id, binding.capture_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+        ).optional()?;
+        if let Some((artifact_id, capture_id, endpoint, identity, name, key_ref, state)) = existing
+        {
+            if artifact_id != binding.artifact_id
+                || capture_id != binding.capture_id
+                || endpoint != binding.storage_endpoint_id
+                || identity != binding.storage_identity
+                || name != binding.relative_name
+                || key_ref != binding.key_ref
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+            if state == "abandoned" {
+                return Err(StateError::EffectConflict);
+            }
+        } else {
+            let capture_exists: bool = transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM captures WHERE capture_id = ?1)",
+                [&binding.capture_id],
+                |row| row.get(0),
+            )?;
+            if !capture_exists {
+                return Err(StateError::EffectConflict);
+            }
+            transaction.execute("INSERT INTO manifest_artifacts (artifact_id, capture_id, storage_endpoint_id, storage_identity, relative_name, key_ref, effect_state) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'prepared')", params![binding.artifact_id, binding.capture_id, binding.storage_endpoint_id, binding.storage_identity, binding.relative_name, binding.key_ref])?;
+        }
+        transaction.commit()?;
+        self.get_manifest_artifact(&binding.artifact_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn get_manifest_artifact(
+        &self,
+        artifact_id: &str,
+    ) -> Result<Option<ManifestArtifactRecord>, StateError> {
+        if !valid_identifier_text(artifact_id) {
+            return Err(StateError::InvalidInput);
+        }
+        self.connection.query_row("SELECT artifact_id, capture_id, storage_endpoint_id, storage_identity, relative_name, key_ref, effect_state, ciphertext_digest, ciphertext_bytes, manifest_digest, manifest_entry_count FROM manifest_artifacts WHERE artifact_id = ?1", [artifact_id], |row| {
+            Ok(ManifestArtifactRecord { binding: ManifestArtifactBinding { artifact_id: row.get(0)?, capture_id: row.get(1)?, storage_endpoint_id: row.get(2)?, storage_identity: row.get(3)?, relative_name: row.get(4)?, key_ref: row.get(5)? }, effect_state: row.get(6)?, ciphertext_digest: row.get(7)?, ciphertext_bytes: row.get(8)?, manifest_digest: row.get(9)?, manifest_entry_count: row.get(10)? })
+        }).optional().map_err(StateError::from)
+    }
+
+    pub fn get_capture_artifact(
+        &self,
+        capture_id: &str,
+    ) -> Result<Option<ManifestArtifactRecord>, StateError> {
+        if !valid_identifier_text(capture_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let artifact_id: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT artifact_id FROM manifest_artifacts WHERE capture_id = ?1",
+                [capture_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        artifact_id
+            .map(|id| {
+                self.get_manifest_artifact(&id)?
+                    .ok_or(StateError::EffectConflict)
+            })
+            .transpose()
+    }
+
+    pub fn list_pending_artifacts(
+        &self,
+        after_artifact_id: &str,
+        limit: u32,
+    ) -> Result<Vec<ManifestArtifactRecord>, StateError> {
+        if !(1..=1000).contains(&limit) || after_artifact_id.len() > 128 {
+            return Err(StateError::InvalidInput);
+        }
+        let mut statement = self.connection.prepare("SELECT artifact_id FROM manifest_artifacts WHERE effect_state = 'prepared' AND artifact_id > ?1 ORDER BY artifact_id LIMIT ?2")?;
+        let rows = statement.query_map(params![after_artifact_id, limit], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(
+                self.get_manifest_artifact(&row?)?
+                    .ok_or(StateError::EffectConflict)?,
+            );
+        }
+        Ok(records)
+    }
+
+    pub fn seal_manifest_artifact(
+        &mut self,
+        artifact_id: &str,
+        ciphertext_digest: &str,
+        ciphertext_bytes: u64,
+        manifest_digest: &str,
+        manifest_entry_count: u64,
+    ) -> Result<ManifestArtifactRecord, StateError> {
+        if !valid_identifier_text(artifact_id)
+            || !valid_digest_text(ciphertext_digest)
+            || !valid_digest_text(manifest_digest)
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let ciphertext_bytes = ciphertext_bytes.to_string();
+        let manifest_entry_count = manifest_entry_count.to_string();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior: Option<ArtifactSealRow> = transaction.query_row("SELECT capture_id, effect_state, ciphertext_digest, ciphertext_bytes, manifest_digest, manifest_entry_count FROM manifest_artifacts WHERE artifact_id = ?1", [artifact_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))).optional()?;
+        let (capture_id, state, prior_cipher, prior_size, prior_manifest, prior_count) =
+            prior.ok_or(StateError::EffectConflict)?;
+        if state == "abandoned" {
+            return Err(StateError::EffectConflict);
+        }
+        if state == "sealed" {
+            if prior_cipher.as_deref() != Some(ciphertext_digest)
+                || prior_size.as_deref() != Some(ciphertext_bytes.as_str())
+                || prior_manifest.as_deref() != Some(manifest_digest)
+                || prior_count.as_deref() != Some(manifest_entry_count.as_str())
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else if state == "prepared" {
+            let capture: (Option<String>, Option<String>, Option<String>) = transaction.query_row("SELECT manifest_digest, manifest_entry_count, manifest_artifact_id FROM captures WHERE capture_id = ?1", [&capture_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+            if capture
+                .0
+                .as_deref()
+                .is_some_and(|value| value != manifest_digest)
+                || capture
+                    .1
+                    .as_deref()
+                    .is_some_and(|value| value != manifest_entry_count)
+                || capture
+                    .2
+                    .as_deref()
+                    .is_some_and(|value| value != artifact_id)
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+            transaction.execute("UPDATE captures SET manifest_digest = ?1, manifest_entry_count = ?2, manifest_artifact_id = ?3, system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE capture_id = ?4", params![manifest_digest, manifest_entry_count, artifact_id, capture_id])?;
+            transaction.execute("UPDATE manifest_artifacts SET effect_state = 'sealed', ciphertext_digest = ?1, ciphertext_bytes = ?2, manifest_digest = ?3, manifest_entry_count = ?4, system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE artifact_id = ?5 AND effect_state = 'prepared'", params![ciphertext_digest, ciphertext_bytes, manifest_digest, manifest_entry_count, artifact_id])?;
+        } else {
+            return Err(StateError::EffectConflict);
+        }
+        transaction.commit()?;
+        self.get_manifest_artifact(artifact_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn abandon_manifest_artifact(
+        &mut self,
+        artifact_id: &str,
+    ) -> Result<ManifestArtifactRecord, StateError> {
+        if !valid_identifier_text(artifact_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let changed = self.connection.execute("UPDATE manifest_artifacts SET effect_state = 'abandoned', system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE artifact_id = ?1 AND effect_state = 'prepared'", [artifact_id])?;
+        if changed != 1 {
+            return Err(StateError::EffectConflict);
+        }
+        self.get_manifest_artifact(artifact_id)?
+            .ok_or(StateError::EffectConflict)
     }
 
     pub fn bind_publication(&mut self, binding: &Value) -> Result<PublicationRecord, StateError> {
@@ -849,6 +1065,44 @@ fn validate_capture_binding(binding: &CaptureBinding) -> Result<(), StateError> 
             "application_consistent" | "crash_consistent" | "best_effort"
         )
         || !is_digest(&Value::String(binding.source_selection_digest.clone()))
+    {
+        return Err(StateError::InvalidInput);
+    }
+    Ok(())
+}
+
+fn valid_identifier_text(text: &str) -> bool {
+    let mut bytes = text.bytes();
+    !text.is_empty()
+        && text.len() <= 128
+        && bytes
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && bytes
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+}
+
+fn valid_digest_text(text: &str) -> bool {
+    text.len() == 71
+        && text.starts_with("sha256:")
+        && text.as_bytes()[7..]
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+}
+
+fn validate_artifact_binding(binding: &ManifestArtifactBinding) -> Result<(), StateError> {
+    if [
+        &binding.artifact_id,
+        &binding.capture_id,
+        &binding.storage_endpoint_id,
+        &binding.storage_identity,
+        &binding.key_ref,
+    ]
+    .iter()
+    .any(|value| !valid_identifier_text(value))
+        || binding.artifact_id.contains(':')
+        || binding.relative_name.len() > 144
+        || binding.relative_name != format!("artifact_{}.sealed", binding.artifact_id)
     {
         return Err(StateError::InvalidInput);
     }

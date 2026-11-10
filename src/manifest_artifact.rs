@@ -347,13 +347,25 @@ pub fn verify_sealed_manifest<R: Read>(
     guard: &StageGuard,
     expected_digest: &str,
 ) -> Result<ManifestArtifact, ArtifactError> {
+    let artifact = inspect_sealed_manifest(source, binding, key, limits, guard)?;
+
+    if artifact.digest != expected_digest {
+        return Err(ArtifactError::AUTHENTICATION);
+    }
+
+    Ok(artifact)
+}
+
+pub fn inspect_sealed_manifest<R: Read>(
+    source: &mut R,
+    binding: &CaptureBinding,
+    key: &Zeroizing<[u8; 32]>,
+    limits: encrypted_spool::SpoolLimits,
+    guard: &StageGuard,
+) -> Result<ManifestArtifact, ArtifactError> {
     let context = context(binding)?;
     let mut parser = FrameParser::new(binding, guard);
     encrypted_spool::decrypt_spool(source, &mut parser, key, &context, limits, guard)
         .map_err(ArtifactError::ENCRYPTED)?;
-    let artifact = parser.finish()?;
-    if artifact.digest != expected_digest {
-        return Err(ArtifactError::AUTHENTICATION);
-    }
-    Ok(artifact)
+    parser.finish()
 }

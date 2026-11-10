@@ -23,3 +23,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 6. Reduced-Memory Milestone
 
 [Run 42806104925](https://github.com/mayazrakib/relic/actions/runs/42806104925) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `7a2e98d`, including the Windows test correction. This verifies that milestone's native builds and selected component tests. Later pinned-capture integration changes require their own native run, and the external executable recovery tests remain outside default CI.
+
+## 7. Pinned Capture Milestone
+
+[Run 42807908209](https://github.com/mayazrakib/relic/actions/runs/42807908209) passed on all three selected native targets for `49ef734`. This covers the pinned source, encrypted sorting, manifest verification, and capture freeze integration included in that commit. Subsequent durable artifact ownership and reconciliation changes require a fresh native run. Windows artifact storage, production backup execution, and the remaining full-system acceptance gates are still unfinished.

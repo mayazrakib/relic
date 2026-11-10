@@ -1,16 +1,17 @@
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
-use std::fs::{self, File, OpenOptions};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::fs;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
+use relic::artifact_store::ArtifactStore;
 use relic::encrypted_manifest_sort::{EncryptedManifestSort, SortLimits};
 use relic::encrypted_spool::SpoolLimits;
 use relic::identity::hash_domain;
 use relic::local_endpoint::{FileIdentity, LocalEndpoint};
-use relic::manifest_artifact::{seal_sorted_manifest, verify_sealed_manifest};
-use relic::resources::StageGuard;
+use relic::manifest_artifact::seal_sorted_manifest;
+use relic::resources::{Demand, ResourceClass, ResourcePool, StageGuard};
 use relic::source_scan::{ScanLimits, scan_source_pinned};
-use relic::state::{CaptureBinding, StateStore};
+use relic::state::{CaptureBinding, ManifestArtifactBinding, StateStore};
 use serde_json::json;
 use zeroize::Zeroizing;
 
@@ -67,6 +68,27 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
     fs::create_dir(&runs).unwrap();
     fs::set_permissions(&runs, fs::Permissions::from_mode(0o700)).unwrap();
     fs::write(source.join("confidential_name"), b"data").unwrap();
+    let artifact_directory = root.join("artifacts");
+    fs::create_dir(&artifact_directory).unwrap();
+    fs::set_permissions(&artifact_directory, fs::Permissions::from_mode(0o700)).unwrap();
+    let key = Zeroizing::new([7; 32]);
+    let guard = StageGuard::default();
+    let pool = ResourcePool::new(ResourceClass::BALANCED, 8);
+    let job = pool.admit_job("job_1", &guard).unwrap();
+    let stage_reservation = job
+        .reserve_stage(
+            Some("capture_endpoint"),
+            Demand {
+                data_bytes: 16 * 1024 * 1024,
+                spool_bytes: 8 * 1024 * 1024,
+                open_files: 32,
+                cpu_workers: 1,
+                streams: 1,
+                ..Demand::default()
+            },
+            &guard,
+        )
+        .unwrap();
     let metadata = fs::metadata(&source).unwrap();
     let endpoint = LocalEndpoint::resolve(
         &source,
@@ -76,11 +98,39 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
         },
     )
     .unwrap();
-    let key = Zeroizing::new([7; 32]);
-    let guard = StageGuard::default();
+    let metadata = fs::metadata(&artifact_directory).unwrap();
+    let artifact_endpoint = LocalEndpoint::resolve(
+        &artifact_directory,
+        FileIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        },
+    )
+    .unwrap();
+    let artifacts = ArtifactStore::new(artifact_endpoint, "local_artifacts").unwrap();
     let binding = get_binding(&endpoint);
+    let artifact_binding = ManifestArtifactBinding {
+        artifact_id: "artifact_1".into(),
+        capture_id: binding.capture_id.clone(),
+        storage_endpoint_id: "local_artifacts".into(),
+        storage_identity: artifacts.storage_identity().to_owned(),
+        relative_name: "artifact_artifact_1.sealed".into(),
+        key_ref: "key_1".into(),
+    };
     let mut store = StateStore::open(&state).unwrap();
     store.bind_capture(&binding).unwrap();
+    let mut stage = artifacts
+        .begin(&mut store, &artifact_binding, get_spool_limits(), &guard)
+        .unwrap();
+    let pending = root.join("artifacts/.artifact_artifact_1.pending");
+    assert_eq!(
+        store
+            .get_manifest_artifact("artifact_1")
+            .unwrap()
+            .unwrap()
+            .effect_state,
+        "prepared"
+    );
     let sorter = EncryptedManifestSort::create(&runs, &key, get_sort_limits(), &guard).unwrap();
     let (mut sorter, count) = scan_source_pinned(
         &endpoint,
@@ -97,64 +147,84 @@ fn captures_pinned_source_into_verified_encrypted_artifact_and_freezes() {
     )
     .unwrap();
     assert_eq!(count, 2);
-    let artifact_path = root.join("artifact.enc");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(&artifact_path)
-        .unwrap();
     let artifact = seal_sorted_manifest(
         &mut sorter,
         count,
         &binding,
-        &mut file,
+        &mut stage,
         &key,
         get_spool_limits(),
         &guard,
     )
     .unwrap();
-    file.sync_all().unwrap();
-    File::open(&root).unwrap().sync_all().unwrap();
-    for entry in fs::read_dir(&runs).unwrap() {
-        let bytes = fs::read(entry.unwrap().path()).unwrap();
+    for path in fs::read_dir(&runs)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .chain(std::iter::once(pending))
+    {
+        let bytes = fs::read(path).unwrap();
         assert!(
             !bytes
                 .windows(b"private_source_id".len())
                 .any(|value| value == b"private_source_id")
         );
+        assert!(
+            !bytes
+                .windows(b"confidential_name".len())
+                .any(|value| value == b"confidential_name")
+        );
+        assert!(
+            !bytes
+                .windows(b"Y29uZmlkZW50aWFsX25hbWU".len())
+                .any(|value| value == b"Y29uZmlkZW50aWFsX25hbWU")
+        );
     }
-    let bytes = fs::read(&artifact_path).unwrap();
-    assert!(
-        !bytes
-            .windows(b"private_source_id".len())
-            .any(|value| value == b"private_source_id")
-    );
-    assert!(
-        !bytes
-            .windows(b"confidential_name".len())
-            .any(|value| value == b"confidential_name")
-    );
-    let verified = verify_sealed_manifest(
-        &mut File::open(&artifact_path).unwrap(),
-        &binding,
-        &key,
-        get_spool_limits(),
-        &guard,
-        &artifact.digest,
-    )
-    .unwrap();
-    assert_eq!(verified, artifact);
-    store
-        .freeze_capture_manifest(&binding.capture_id, &verified.digest, verified.entry_count)
+    let committed = artifacts
+        .commit(stage, &mut store, "key_1", &key, &artifact)
         .unwrap();
-    drop(store);
-    let store = StateStore::open(&state).unwrap();
+    assert_eq!(committed.effect_state, "sealed");
     let capture = store.get_capture(&binding.capture_id).unwrap().unwrap();
     assert_eq!(
         capture.manifest_digest.as_deref(),
-        Some(verified.digest.as_str())
+        Some(artifact.digest.as_str())
     );
     assert_eq!(capture.manifest_entry_count.as_deref(), Some("2"));
+    assert_eq!(capture.manifest_artifact_id.as_deref(), Some("artifact_1"));
+    drop(sorter);
+    drop(artifacts);
+    drop(store);
+    let metadata = fs::metadata(&artifact_directory).unwrap();
+    let reopened_endpoint = LocalEndpoint::resolve(
+        &artifact_directory,
+        FileIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        },
+    )
+    .unwrap();
+    let reopened_artifacts = ArtifactStore::new(reopened_endpoint, "local_artifacts").unwrap();
+    let mut reopened_state = StateStore::open(&state).unwrap();
+    let reconciled = reopened_artifacts
+        .reconcile(
+            &mut reopened_state,
+            "artifact_1",
+            "key_1",
+            &key,
+            get_spool_limits(),
+            &guard,
+        )
+        .unwrap();
+    assert_eq!(reconciled, committed);
+    let capture = reopened_state
+        .get_capture(&binding.capture_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(capture.manifest_artifact_id.as_deref(), Some("artifact_1"));
+    drop(reopened_state);
+    drop(reopened_artifacts);
+    drop(endpoint);
+    drop(job);
+    assert_eq!(pool.usage().unwrap().0.jobs, 1);
+    drop(stage_reservation);
+    assert_eq!(pool.usage().unwrap().0, Demand::default());
 }

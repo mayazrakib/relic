@@ -321,15 +321,16 @@
         "docs/evidence/bounded_primitives.json",
         "docs/evidence/capture_admission.json",
         "docs/evidence/low_memory.json",
-        "docs/evidence/pinned_capture.json"
+        "docs/evidence/pinned_capture.json",
+        "docs/evidence/artifact_store.json"
     ],
     "blockers": [],
-    "next_action": "Push verified pinned-capture integration and inspect its native CI. Next implement durable manifest artifact ownership/location/key-reference linkage and crash reconciliation, then encrypted payload staging, archive resource/cancellation qualification and fenced publication. Preserve every full-system phase and the 1GiB/no-swap limit.",
+    "next_action": "Push verified artifact lifecycle milestone and observe native CI without restarting. Implement encrypted source-payload preservation and restore with immutable ownership, bounded streaming, cancellation and crash reconciliation. Close archive memory/cancellation/publication qualification before enabled daemon jobs. All full-system phases remain required under 1GiB/high768MiB/no swap and at most one worker.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "68a5e776a36e03330e09dc3dabb03f679b6a8a3d3bdd6d276db811b4a2270400",
+    "source_fingerprint": "af2bf9ef09c52ccac5d01eb37736d2459cd88423789c65f203f21f26776a012b",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -602,13 +603,49 @@
                 "docs/evidence/pinned_capture.json"
             ],
             "limits": "Real filesystem fixture only; artifact/key linkage, payload staging, recovery and production publication remain incomplete"
+        },
+        {
+            "name": "Immutable manifest artifact journal and atomic capture link",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/artifact_state.rs",
+                "database/migrations/00003_manifest_artifacts.sql",
+                "docs/evidence/artifact_store.json"
+            ],
+            "limits": "Journal evidence supplied by trusted caller; authenticated verification lives in artifact store"
+        },
+        {
+            "name": "Unix owned artifact staging and authenticated crash reconciliation",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/artifact_store.rs",
+                "tests/capture_integration.rs",
+                "docs/artifact_store.md",
+                "docs/evidence/artifact_store.json"
+            ],
+            "limits": "Simulated process boundaries only; no power-loss, Windows, payload backup, key-provider lifecycle, retention or distributed fencing qualification"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Reduced and enforced host memory to1GiB/high768MiB/no swap and one worker; pushed7a2e98d with successful three-target CI. Continued real pinned-source/encrypted-sort/artifact integration. Full92-test suite and Clippy pass; peak555.1M, zero ignored. Complete implementation goal remains active."
+        "result": "Implemented durable artifact journal, immutable ownership and Unix crash reconciliation; resource-reserved pinned capture fixture uses owned storage. All102 local tests pass, zero ignored; Clippy and formatting pass. Test peak578.2M and Clippy265.2M, zero swap. Prior49ef734 native CI passed all three targets; new milestone native execution pending. Full-system goal remains active."
     },
     "remote_checkpoint": {
+        "commit": "49ef7343482b8900627797930a5addf0ccf1044d",
+        "branch": "implementation/relic-full-system",
+        "native_ci_run_id": 42807908209,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42807908209",
+        "status": "completed_successfully",
+        "push_transport": "existing authorized SSH credential",
+        "results": {
+            "linux-x86_64": "success",
+            "windows-x86_64": "success",
+            "macos-arm64": "success"
+        }
+    },
+    "prior_native_checkpoint": {
         "commit": "7a2e98d9aa0389247325ec0ad785e0085a5e5a14",
         "branch": "implementation/relic-full-system",
         "native_ci_run_id": 42806104925,
@@ -619,19 +656,6 @@
             "linux-x86_64": "success",
             "windows-x86_64": "success",
             "macos-arm64": "success"
-        }
-    },
-    "prior_native_checkpoint": {
-        "commit": "4de2f03f85a7366f2f12ce4535d7f5eadf04961a",
-        "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42803038693,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42803038693",
-        "status": "completed_with_windows_test_cfg_failure",
-        "push_transport": "existing authorized SSH credential",
-        "results": {
-            "linux-x86_64": "success",
-            "macos-arm64": "success",
-            "windows-x86_64": "failure: Unix cfg attached to shared capture helper"
         }
     },
     "earlier_native_checkpoints": [
@@ -672,6 +696,19 @@
                 "linux-x86_64": "success",
                 "windows-x86_64": "success",
                 "macos-arm64": "failure: invalid-byte fixture creation EILSEQ before scanner execution"
+            }
+        },
+        {
+            "commit": "4de2f03f85a7366f2f12ce4535d7f5eadf04961a",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42803038693,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42803038693",
+            "status": "completed_with_windows_test_cfg_failure",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "macos-arm64": "success",
+                "windows-x86_64": "failure: Unix cfg attached to shared capture helper"
             }
         }
     ],
