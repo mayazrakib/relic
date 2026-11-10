@@ -2,7 +2,7 @@
 
 A *contained archive worker* is a short-lived process that reads an owned encrypted archive source, creates a private native repository, and verifies its complete snapshot against the frozen manifest before returning a bounded report. The Linux implementation embeds the pinned archive SDK in `relic-worker`. Parent cancellation controls the process and its descendants rather than depending on SDK callbacks to interrupt blocking work.
 
-This remains private staging. Durable worker-run ownership and reconciliation, destination admission and fencing, native destination receipts, production daemon integration, and complete release qualification remain required before enabled archive jobs.
+This remains private staging. [Durable run ownership and reconciliation](native_run_store.md), destination admission and fencing, native destination receipts, production daemon integration, and complete release qualification remain required before enabled archive jobs.
 
 ## 2. Aggregate and Worker Budgets
 
@@ -45,7 +45,7 @@ The request is a length-prefixed JSON object with strict unknown-field rejection
 
 After launch, an error produces an *unknown outcome*: private repository effects may already exist and require reconciliation. The parent terminates the entire worker cgroup and checks process reaping and group population within the bounded window. Unreaped processes and unreadable or malformed evidence remain uncertain. Missing counters are never accepted as proof of successful execution. Successful completion requires closed pipes, successful process exit, an empty group, readable memory evidence, no OOM-kill events, and a peak within the configured maximum.
 
-The report identifies the stage, native snapshot, expected logical manifest, and verified counts. It is not a destination publication receipt. Production orchestration still needs durable pre-execution intents, owned repository/key references, restart reconciliation, and resource-lease retention for uncertain effects.
+The report identifies the stage, native snapshot, expected logical manifest, and verified counts. It is not a destination publication receipt. The [native run store](native_run_store.md) now adds durable pre-execution intents, owned repository/key references, restart verification, and retained resource leases for unreaped workers. Full controller startup and persistent accounting remain open.
 
 ## 6. Evidence and Remaining Acceptance
 
@@ -53,4 +53,4 @@ The [evidence record](evidence/archive_worker.json) binds the source fingerprint
 
 The native fixture deletes original source files and captured payload, launches the contained SDK worker, verifies the complete staged snapshot, and restores it through an independently verified restic executable. Its measured worker peak is asserted within the 192 MiB cap. Local runtime checks require the delegated Linux guard; default hosted native CI compiles the implementation and runs portable/default checks while leaving explicitly marked host-dependent tests outside that matrix.
 
-Large-index and sustained performance qualification, persistent staging quotas, durable native worker lifecycle, cleanup, key-provider lifecycle, Windows and macOS worker containment, full metadata and source-name profiles, S3, fenced destination mutation, durable receipts, and all remaining full-system acceptance phases remain open. Filesystem grants bound SDK pathname access to selected hierarchies; backend durability and adversarial behavior within those hierarchies still need provider qualification.
+Large-index and sustained performance qualification, persistent staging quotas, full controller startup, cleanup, key-provider lifecycle, Windows and macOS worker containment, full metadata and source-name profiles, S3, fenced destination mutation, durable receipts, and all remaining full-system acceptance phases remain open. Filesystem grants bound SDK pathname access to selected hierarchies; backend durability and adversarial behavior within those hierarchies still need provider qualification.

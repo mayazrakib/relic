@@ -228,7 +228,7 @@ fn pages_files_and_preserves_abandoned_records() {
 }
 
 #[test]
-fn migrates_existing_schema_five_to_six() {
+fn migrates_existing_schema_five_to_current() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state");
     let store = StateStore::open(&path).unwrap();
@@ -236,7 +236,7 @@ fn migrates_existing_schema_five_to_six() {
     let connection = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE archive_files; DROP TABLE archive_stages; PRAGMA user_version = 5;",
+            "DROP TABLE native_runs; DROP TABLE archive_files; DROP TABLE archive_stages; PRAGMA user_version = 5;",
         )
         .unwrap();
     drop(connection);
@@ -247,5 +247,5 @@ fn migrates_existing_schema_five_to_six() {
     let version: u32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
 }

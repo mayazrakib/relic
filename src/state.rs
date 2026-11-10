@@ -10,6 +10,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+const CURRENT_SCHEMA_VERSION: u32 = 7;
 
 #[derive(Debug)]
 pub enum StateError {
@@ -236,6 +237,39 @@ type ArchiveStageSealRow = (
     Option<String>,
 );
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeRunBinding {
+    pub run_id: String,
+    pub stage_id: String,
+    pub storage_endpoint_id: String,
+    pub storage_identity: String,
+    pub relative_name: String,
+    pub repository_key_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeRunRecord {
+    pub binding: NativeRunBinding,
+    pub capture_id: String,
+    pub manifest_digest: String,
+    pub manifest_entry_count: String,
+    pub file_count: String,
+    pub payload_bytes: String,
+    pub source_catalog_digest: String,
+    pub source_key_ref: String,
+    pub effect_state: String,
+    pub container_identity: Option<String>,
+    pub repository_identity: Option<String>,
+    pub owner_lock_identity: Option<String>,
+    pub scratch_identity: Option<String>,
+    pub native_snapshot_id: Option<String>,
+    pub active_operation: Option<String>,
+    pub creation_attempts: u32,
+    pub verification_attempts: u64,
+    pub verification_failures: u32,
+}
+
 type RestoreSnapshot = (String, String, String, String, String);
 type RestorePrior = (String, String, String, String, String, String);
 
@@ -311,7 +345,7 @@ impl StateStore {
         connection.pragma_update(None, "query_only", true)?;
         connection.pragma_update(None, "trusted_schema", false)?;
         let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version != 6 {
+        if version != CURRENT_SCHEMA_VERSION {
             return Err(StateError::UnsupportedVersion);
         }
         let current = validate_readonly_state_file(&path)?;
@@ -489,7 +523,7 @@ impl StateStore {
         let version: u32 =
             transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
-        if version > 6 {
+        if version > CURRENT_SCHEMA_VERSION {
             return Err(StateError::UnsupportedVersion);
         }
         if version == 0 {
@@ -519,6 +553,11 @@ impl StateStore {
             transaction.execute_batch(include_str!(
                 "../database/migrations/00006_archive_stages.sql"
             ))?;
+        }
+
+        if version <= 6 {
+            transaction
+                .execute_batch(include_str!("../database/migrations/00007_native_runs.sql"))?;
         }
 
         transaction.commit()?;
@@ -1652,6 +1691,266 @@ impl StateStore {
             .ok_or(StateError::EffectConflict)
     }
 
+    pub fn prepare_native_run(
+        &mut self,
+        binding: &NativeRunBinding,
+    ) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(&binding.run_id)
+            || !valid_archive_id(&binding.stage_id)
+            || !valid_identifier_text(&binding.storage_endpoint_id)
+            || !valid_identifier_text(&binding.storage_identity)
+            || !valid_identifier_text(&binding.repository_key_ref)
+            || binding.relative_name != format!("native_{}", binding.run_id)
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        if let Some(prior) = read_native_run(&transaction, &binding.run_id)? {
+            if prior.binding != *binding {
+                return Err(StateError::IdempotencyConflict);
+            }
+            if prior.effect_state == "abandoned" {
+                return Err(StateError::EffectConflict);
+            }
+        } else {
+            let reserved: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM native_runs WHERE (storage_endpoint_id = ?1 OR storage_identity = ?2) AND relative_name = ?3 AND effect_state != 'abandoned')", params![binding.storage_endpoint_id, binding.storage_identity, binding.relative_name], |row| row.get(0))?;
+            if reserved {
+                return Err(StateError::EffectConflict);
+            }
+            let snapshot: Option<(String, String, String, String, String, String, String)> = transaction.query_row(
+                "SELECT s.capture_id, s.manifest_digest, s.manifest_entry_count, s.file_count, s.payload_bytes, s.catalog_ciphertext_digest, s.key_ref FROM archive_stages s JOIN captures c ON c.capture_id = s.capture_id JOIN payload_artifacts p ON p.artifact_id = s.payload_artifact_id AND p.capture_id = s.capture_id JOIN manifest_artifacts m ON m.artifact_id = c.manifest_artifact_id AND m.capture_id = c.capture_id WHERE s.stage_id = ?1 AND s.effect_state = 'sealed' AND s.catalog_ciphertext_digest IS NOT NULL AND s.catalog_ciphertext_bytes IS NOT NULL AND s.catalog_identity IS NOT NULL AND c.payload_artifact_id = p.artifact_id AND p.effect_state = 'sealed' AND m.effect_state = 'sealed' AND c.manifest_digest = s.manifest_digest AND c.manifest_digest = p.manifest_digest AND c.manifest_digest = m.manifest_digest AND c.manifest_entry_count = s.manifest_entry_count AND c.manifest_entry_count = p.manifest_entry_count AND c.manifest_entry_count = m.manifest_entry_count AND s.payload_ciphertext_digest = p.ciphertext_digest AND s.file_count = p.file_count AND s.payload_bytes = p.payload_bytes",
+                [&binding.stage_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+            ).optional()?;
+            let (capture, digest, entries, files, bytes, catalog, key_ref) =
+                snapshot.ok_or(StateError::EffectConflict)?;
+            if !valid_digest_text(&digest)
+                || !valid_digest_text(&catalog)
+                || parse_archive_counter(&files)? > parse_archive_counter(&entries)?
+            {
+                return Err(StateError::InvalidInput);
+            }
+            parse_archive_counter(&bytes)?;
+            transaction.execute("INSERT INTO native_runs (run_id, stage_id, storage_endpoint_id, storage_identity, relative_name, repository_key_ref, capture_id, manifest_digest, manifest_entry_count, file_count, payload_bytes, source_catalog_digest, source_key_ref, effect_state) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'prepared')", params![binding.run_id, binding.stage_id, binding.storage_endpoint_id, binding.storage_identity, binding.relative_name, binding.repository_key_ref, capture, digest, entries, files, bytes, catalog, key_ref])?;
+        }
+        transaction.commit()?;
+        self.get_native_run(&binding.run_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn get_native_run(&self, run_id: &str) -> Result<Option<NativeRunRecord>, StateError> {
+        if !valid_archive_id(run_id) {
+            return Err(StateError::InvalidInput);
+        }
+        read_native_run(&self.connection, run_id)
+    }
+
+    pub fn list_pending_native_runs(
+        &self,
+        after: &str,
+        limit: u32,
+    ) -> Result<Vec<NativeRunRecord>, StateError> {
+        if (!after.is_empty() && !valid_archive_id(after)) || !(1..=1000).contains(&limit) {
+            return Err(StateError::InvalidInput);
+        }
+        let mut statement = self.connection.prepare("SELECT run_id FROM native_runs WHERE effect_state NOT IN ('verified', 'abandoned') AND run_id > ?1 ORDER BY run_id LIMIT ?2")?;
+        let rows = statement.query_map(params![after, limit], |row| row.get::<_, String>(0))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(
+                self.get_native_run(&row?)?
+                    .ok_or(StateError::EffectConflict)?,
+            );
+        }
+        Ok(result)
+    }
+
+    pub fn mark_native_staging(
+        &mut self,
+        run_id: &str,
+        identity: &str,
+    ) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(run_id) || !valid_identifier_text(identity) {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior = read_native_run(&transaction, run_id)?.ok_or(StateError::EffectConflict)?;
+        match prior.effect_state.as_str() {
+            "prepared" => {
+                transaction.execute("UPDATE native_runs SET effect_state = 'staging', container_identity = ?1 WHERE run_id = ?2", params![identity, run_id])?;
+            }
+            "staging" if prior.container_identity.as_deref() == Some(identity) => {}
+            "staging" => return Err(StateError::IdempotencyConflict),
+            _ => return Err(StateError::EffectConflict),
+        }
+        transaction.commit()?;
+        self.get_native_run(run_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn mark_native_ready(
+        &mut self,
+        run_id: &str,
+        repository_identity: &str,
+        owner_lock_identity: &str,
+        scratch_identity: &str,
+    ) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(run_id)
+            || ![repository_identity, owner_lock_identity, scratch_identity]
+                .iter()
+                .all(|value| valid_identifier_text(value))
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior = read_native_run(&transaction, run_id)?.ok_or(StateError::EffectConflict)?;
+        if prior.effect_state == "staging" {
+            transaction.execute("UPDATE native_runs SET effect_state = 'ready', repository_identity = ?1, owner_lock_identity = ?2, scratch_identity = ?3 WHERE run_id = ?4", params![repository_identity, owner_lock_identity, scratch_identity, run_id])?;
+        } else if matches!(
+            prior.effect_state.as_str(),
+            "ready" | "running" | "unknown" | "verified"
+        ) {
+            if prior.repository_identity.as_deref() != Some(repository_identity)
+                || prior.owner_lock_identity.as_deref() != Some(owner_lock_identity)
+                || prior.scratch_identity.as_deref() != Some(scratch_identity)
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else {
+            return Err(StateError::EffectConflict);
+        }
+        transaction.commit()?;
+        self.get_native_run(run_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn start_native_run(
+        &mut self,
+        run_id: &str,
+        operation: &str,
+    ) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(run_id) || !matches!(operation, "create" | "verify") {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior = read_native_run(&transaction, run_id)?.ok_or(StateError::EffectConflict)?;
+        if operation == "create" {
+            if prior.effect_state != "ready" || prior.creation_attempts != 0 {
+                return Err(StateError::EffectConflict);
+            }
+            transaction.execute("UPDATE native_runs SET effect_state = 'running', active_operation = 'create', creation_attempts = 1 WHERE run_id = ?1", [run_id])?;
+        } else {
+            if !matches!(prior.effect_state.as_str(), "unknown" | "verified")
+                || prior.verification_failures >= 3
+            {
+                return Err(StateError::EffectConflict);
+            }
+            let attempts = prior
+                .verification_attempts
+                .checked_add(1)
+                .ok_or(StateError::InvalidInput)?;
+            transaction.execute("UPDATE native_runs SET effect_state = 'running', active_operation = 'verify', verification_attempts = ?1 WHERE run_id = ?2", params![attempts.to_string(), run_id])?;
+        }
+        transaction.commit()?;
+        self.get_native_run(run_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn mark_native_unknown(&mut self, run_id: &str) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(run_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior = read_native_run(&transaction, run_id)?.ok_or(StateError::EffectConflict)?;
+        match prior.effect_state.as_str() {
+            "running" => {
+                let failures = if prior.active_operation.as_deref() == Some("verify") {
+                    prior
+                        .verification_failures
+                        .checked_add(1)
+                        .ok_or(StateError::InvalidInput)?
+                } else {
+                    prior.verification_failures
+                };
+                if failures > 3 {
+                    return Err(StateError::InvalidInput);
+                }
+                transaction.execute("UPDATE native_runs SET effect_state = 'unknown', active_operation = NULL, verification_failures = ?1 WHERE run_id = ?2", params![failures, run_id])?;
+            }
+            "unknown" => {}
+            _ => return Err(StateError::EffectConflict),
+        }
+        transaction.commit()?;
+        self.get_native_run(run_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn seal_native_run(
+        &mut self,
+        run_id: &str,
+        snapshot_id: &str,
+        digest: &str,
+        entries: u64,
+        files: u64,
+        bytes: u64,
+    ) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(run_id)
+            || snapshot_id.len() != 64
+            || !snapshot_id
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            || !valid_digest_text(digest)
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior = read_native_run(&transaction, run_id)?.ok_or(StateError::EffectConflict)?;
+        if prior.manifest_digest != digest
+            || prior.manifest_entry_count != entries.to_string()
+            || prior.file_count != files.to_string()
+            || prior.payload_bytes != bytes.to_string()
+            || prior
+                .native_snapshot_id
+                .as_deref()
+                .is_some_and(|value| value != snapshot_id)
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
+        if prior.effect_state == "running" {
+            transaction.execute("UPDATE native_runs SET effect_state = 'verified', native_snapshot_id = ?1, active_operation = NULL, verification_failures = 0 WHERE run_id = ?2", params![snapshot_id, run_id])?;
+        } else if prior.effect_state != "verified"
+            || prior.native_snapshot_id.as_deref() != Some(snapshot_id)
+        {
+            return Err(StateError::EffectConflict);
+        }
+        transaction.commit()?;
+        self.get_native_run(run_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn abandon_native_run(&mut self, run_id: &str) -> Result<NativeRunRecord, StateError> {
+        if !valid_archive_id(run_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let changed = self.connection.execute("UPDATE native_runs SET effect_state = 'abandoned', active_operation = NULL WHERE run_id = ?1 AND effect_state IN ('prepared', 'staging', 'ready', 'unknown')", [run_id])?;
+        if changed != 1 {
+            return Err(StateError::EffectConflict);
+        }
+        self.get_native_run(run_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
     pub fn bind_publication(&mut self, binding: &Value) -> Result<PublicationRecord, StateError> {
         validate_publication_binding(binding)?;
         let key = binding.get("commit_key").ok_or(StateError::InvalidInput)?;
@@ -2056,4 +2355,23 @@ fn validate_readonly_state_file(path: &Path) -> Result<fs::Metadata, StateError>
         }
     }
     Ok(metadata)
+}
+
+fn read_native_run(
+    connection: &Connection,
+    run_id: &str,
+) -> Result<Option<NativeRunRecord>, StateError> {
+    let record: Option<(NativeRunRecord, String)> = connection.query_row(
+        "SELECT run_id, stage_id, storage_endpoint_id, storage_identity, relative_name, repository_key_ref, capture_id, manifest_digest, manifest_entry_count, file_count, payload_bytes, source_catalog_digest, source_key_ref, effect_state, container_identity, repository_identity, owner_lock_identity, scratch_identity, native_snapshot_id, active_operation, creation_attempts, verification_attempts, verification_failures FROM native_runs WHERE run_id = ?1",
+        [run_id], |row| Ok((NativeRunRecord {
+            binding: NativeRunBinding { run_id: row.get(0)?, stage_id: row.get(1)?, storage_endpoint_id: row.get(2)?, storage_identity: row.get(3)?, relative_name: row.get(4)?, repository_key_ref: row.get(5)? },
+            capture_id: row.get(6)?, manifest_digest: row.get(7)?, manifest_entry_count: row.get(8)?, file_count: row.get(9)?, payload_bytes: row.get(10)?, source_catalog_digest: row.get(11)?, source_key_ref: row.get(12)?, effect_state: row.get(13)?, container_identity: row.get(14)?, repository_identity: row.get(15)?, owner_lock_identity: row.get(16)?, scratch_identity: row.get(17)?, native_snapshot_id: row.get(18)?, active_operation: row.get(19)?, creation_attempts: row.get(20)?, verification_attempts: 0, verification_failures: row.get(22)?,
+        }, row.get(21)?)),
+    ).optional()?;
+    record
+        .map(|(mut value, attempts)| {
+            value.verification_attempts = parse_archive_counter(&attempts)?;
+            Ok(value)
+        })
+        .transpose()
 }

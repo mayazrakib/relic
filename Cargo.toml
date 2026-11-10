@@ -10,7 +10,7 @@ default-run = "relic"
 
 [features]
 default = []
-embedded-archive = ["dep:rustic_core", "dep:rustic_backend"]
+embedded-archive = ["dep:bytes", "dep:rustic_core", "dep:rustic_backend"]
 
 [[bin]]
 name = "relic"
@@ -22,6 +22,7 @@ path = "src/bin/relicd.rs"
 
 [dependencies]
 base64 = "=0.23.1"
+bytes = { version = "=1.12.1", optional = true }
 chrono = { version = "=0.4.45", features = ["serde"] }
 chrono-tz = "=0.10.4"
 chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }

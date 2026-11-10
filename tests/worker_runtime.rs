@@ -211,3 +211,68 @@ fn grants_repository_writes_while_preserving_readonly_sources() {
     assert!(!source.join("unexpected").exists());
     assert_eq!(fs::read(repository.join("allowed")).unwrap(), b"allowed");
 }
+
+#[test]
+#[ignore = "requires verified delegated Linux cgroup development guard"]
+fn retains_recovery_handle_until_worker_termination_is_proved() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    let marker = directory.path().join("membership");
+    let code = format!(
+        "from pathlib import Path\nimport time\nmember=next(line[3:] for line in Path('/proc/self/cgroup').read_text().splitlines() if line.startswith('0::'))\nPath({:?}).write_text(member)\ntime.sleep(15)",
+        marker.to_str().unwrap()
+    );
+    let script = create_script(directory.path(), &code);
+    let observer = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            if let Ok(member) = fs::read_to_string(&marker) {
+                let control = Path::new("/sys/fs/cgroup")
+                    .join(member.trim().trim_start_matches('/'))
+                    .join("cgroup.kill");
+                assert!(
+                    control
+                        .parent()
+                        .unwrap()
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .starts_with("worker_")
+                );
+                fs::set_permissions(&control, fs::Permissions::from_mode(0o000)).unwrap();
+                return control;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "worker did not report its membership"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    });
+    let result = execute_worker(
+        &script,
+        b"",
+        &[],
+        &[directory.path().to_path_buf()],
+        WorkerLimits {
+            max_runtime: Duration::from_secs(1),
+            ..get_limits()
+        },
+        &StageGuard::default(),
+    );
+    let control = observer.join().unwrap();
+    // Restore the kill control before any assertions, including a failing result assertion.
+    fs::set_permissions(control, fs::Permissions::from_mode(0o600)).unwrap();
+    let Err(WorkerError::OUTCOME_UNKNOWN(mut stop)) = result else {
+        panic!("expected uncertain termination");
+    };
+    assert_eq!(stop.reason, WorkerStopReason::UNREAPED);
+    let mut pending = stop
+        .recovery
+        .take()
+        .expect("live worker ownership must be retained");
+    assert!(!pending.has_ended());
+    assert!(pending.try_reap());
+    assert!(pending.has_ended());
+}

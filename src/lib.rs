@@ -1,4 +1,6 @@
 pub mod archive;
+#[cfg(feature = "embedded-archive")]
+pub mod archive_backend;
 #[cfg(all(feature = "embedded-archive", unix))]
 pub mod archive_disk;
 #[cfg(feature = "embedded-archive")]
@@ -20,6 +22,8 @@ pub mod local_endpoint;
 pub mod manifest;
 pub mod manifest_artifact;
 pub mod manifest_spool;
+#[cfg(all(feature = "embedded-archive", target_os = "linux"))]
+pub mod native_run_store;
 pub mod payload_capture;
 pub mod planner;
 pub mod resources;

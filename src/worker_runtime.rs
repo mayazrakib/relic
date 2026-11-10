@@ -33,6 +33,8 @@ pub enum WorkerStopReason {
 pub struct WorkerStop {
     pub reason: WorkerStopReason,
     pub exit_code: Option<i32>,
+    #[cfg(target_os = "linux")]
+    pub recovery: Option<Box<PendingWorker>>,
     pub memory_peak_bytes: u64,
     pub memory_limit_events: u64,
 }
@@ -311,6 +313,7 @@ mod linux {
             WorkerError::OUTCOME_UNKNOWN(WorkerStop {
                 reason,
                 exit_code: None,
+                recovery: None,
                 memory_peak_bytes: peak.unwrap_or(0),
                 memory_limit_events: events.unwrap_or(0),
             })
@@ -445,21 +448,52 @@ mod linux {
         Ok(child)
     }
 
-    fn stop_worker(
-        child: &mut Child,
-        group: &WorkerGroup,
-        reason: WorkerStopReason,
-    ) -> WorkerError {
+    pub struct PendingWorker {
+        child: Child,
+        group: WorkerGroup,
+    }
+
+    impl std::fmt::Debug for PendingWorker {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter
+                .debug_struct("PendingWorker")
+                .field("pid", &self.child.id())
+                .finish_non_exhaustive()
+        }
+    }
+
+    impl PendingWorker {
+        pub fn has_ended(&mut self) -> bool {
+            self.child.try_wait().ok().flatten().is_some()
+                && matches!(self.group.is_populated(), Ok(false))
+        }
+
+        pub fn try_reap(&mut self) -> bool {
+            self.group.kill();
+            let deadline = Instant::now() + REAP_TIMEOUT;
+            while Instant::now() < deadline {
+                if self.has_ended() {
+                    return true;
+                }
+                thread::sleep(POLL_INTERVAL);
+            }
+            self.has_ended()
+        }
+    }
+
+    impl Drop for PendingWorker {
+        fn drop(&mut self) {
+            self.group.kill();
+            let _ = self.child.try_wait();
+        }
+    }
+
+    fn stop_worker(mut child: Child, group: WorkerGroup, reason: WorkerStopReason) -> WorkerError {
         group.kill();
         let deadline = Instant::now() + REAP_TIMEOUT;
         while Instant::now() < deadline {
             let is_reaped = child.try_wait().ok().flatten().is_some();
             if is_reaped && matches!(group.is_populated(), Ok(false)) {
-                let reason = if group.get_memory_events().is_ok_and(|count| count > 0) {
-                    WorkerStopReason::MEMORY_LIMIT
-                } else {
-                    reason
-                };
                 let mut error = group.get_stop(reason);
                 if let WorkerError::OUTCOME_UNKNOWN(stop) = &mut error {
                     stop.exit_code = child
@@ -472,7 +506,11 @@ mod linux {
             }
             thread::sleep(POLL_INTERVAL);
         }
-        group.get_stop(WorkerStopReason::UNREAPED)
+        let mut error = group.get_stop(WorkerStopReason::UNREAPED);
+        if let WorkerError::OUTCOME_UNKNOWN(stop) = &mut error {
+            stop.recovery = Some(Box::new(PendingWorker { child, group }));
+        }
+        error
     }
 
     fn read_pipe(
@@ -584,35 +622,19 @@ mod linux {
         let mut child = spawn_worker(executable, &group, limits, read_paths, write_paths)?;
         let started = Instant::now();
         let Some(stdin) = child.stdin.take() else {
-            return Err(stop_worker(
-                &mut child,
-                &group,
-                WorkerStopReason::PIPE_FAILURE,
-            ));
+            return Err(stop_worker(child, group, WorkerStopReason::PIPE_FAILURE));
         };
         let Some(mut stdout) = child.stdout.take() else {
-            return Err(stop_worker(
-                &mut child,
-                &group,
-                WorkerStopReason::PIPE_FAILURE,
-            ));
+            return Err(stop_worker(child, group, WorkerStopReason::PIPE_FAILURE));
         };
         let Some(mut stderr) = child.stderr.take() else {
-            return Err(stop_worker(
-                &mut child,
-                &group,
-                WorkerStopReason::PIPE_FAILURE,
-            ));
+            return Err(stop_worker(child, group, WorkerStopReason::PIPE_FAILURE));
         };
         if [stdin.as_raw_fd(), stdout.as_raw_fd(), stderr.as_raw_fd()]
             .into_iter()
             .any(|fd| set_nonblocking(fd).is_err())
         {
-            return Err(stop_worker(
-                &mut child,
-                &group,
-                WorkerStopReason::PIPE_FAILURE,
-            ));
+            return Err(stop_worker(child, group, WorkerStopReason::PIPE_FAILURE));
         }
         let mut stdin = Some(stdin);
         let mut input_position = 0;
@@ -629,13 +651,13 @@ mod linux {
                 } else {
                     WorkerStopReason::CANCELED
                 };
-                return Err(stop_worker(&mut child, &group, reason));
+                return Err(stop_worker(child, group, reason));
             }
             if started.elapsed() >= limits.max_runtime {
-                return Err(stop_worker(&mut child, &group, WorkerStopReason::DEADLINE));
+                return Err(stop_worker(child, group, WorkerStopReason::DEADLINE));
             }
             if let Err(reason) = write_input(&mut stdin, input, &mut input_position) {
-                return Err(stop_worker(&mut child, &group, reason));
+                return Err(stop_worker(child, group, reason));
             }
             if !is_stdout_closed {
                 match read_pipe(
@@ -646,7 +668,7 @@ mod linux {
                     true,
                 ) {
                     Ok(value) => is_stdout_closed = value,
-                    Err(reason) => return Err(stop_worker(&mut child, &group, reason)),
+                    Err(reason) => return Err(stop_worker(child, group, reason)),
                 }
             }
             if !is_stderr_closed {
@@ -658,24 +680,16 @@ mod linux {
                     false,
                 ) {
                     Ok(value) => is_stderr_closed = value,
-                    Err(reason) => return Err(stop_worker(&mut child, &group, reason)),
+                    Err(reason) => return Err(stop_worker(child, group, reason)),
                 }
             }
             match child.try_wait() {
                 Ok(Some(status)) => {
                     if !status.success() {
-                        return Err(stop_worker(
-                            &mut child,
-                            &group,
-                            WorkerStopReason::PROCESS_FAILURE,
-                        ));
+                        return Err(stop_worker(child, group, WorkerStopReason::PROCESS_FAILURE));
                     }
                     if !matches!(group.is_populated(), Ok(false)) {
-                        return Err(stop_worker(
-                            &mut child,
-                            &group,
-                            WorkerStopReason::PROCESS_FAILURE,
-                        ));
+                        return Err(stop_worker(child, group, WorkerStopReason::PROCESS_FAILURE));
                     }
                     if is_stdout_closed && is_stderr_closed && stdin.is_none() {
                         let (Ok(peak), Ok(events)) =
@@ -695,11 +709,7 @@ mod linux {
                 }
                 Ok(None) => {}
                 Err(_) => {
-                    return Err(stop_worker(
-                        &mut child,
-                        &group,
-                        WorkerStopReason::PROCESS_FAILURE,
-                    ));
+                    return Err(stop_worker(child, group, WorkerStopReason::PROCESS_FAILURE));
                 }
             }
             thread::sleep(POLL_INTERVAL);
@@ -733,7 +743,7 @@ mod linux {
 }
 
 #[cfg(target_os = "linux")]
-pub use linux::{execute_worker, prepare_worker_process, verify_worker_envelope};
+pub use linux::{PendingWorker, execute_worker, prepare_worker_process, verify_worker_envelope};
 
 #[cfg(not(target_os = "linux"))]
 pub fn verify_worker_envelope(_memory_max_bytes: u64) -> Result<(), WorkerError> {

@@ -4,12 +4,27 @@ use std::io::Cursor;
 
 use relic::archive_disk::ArchiveDiskLimits;
 use relic::archive_worker::{
-    ArchiveWorkerReport, ArchiveWorkerRequest, WorkerDirectoryIdentity, read_request, write_report,
+    ArchiveWorkerOperation, ArchiveWorkerReport, ArchiveWorkerRequest, WorkerDirectoryIdentity,
+    read_request, write_report,
 };
 use relic::state::ArchiveStageBinding;
 
 fn get_request() -> ArchiveWorkerRequest {
     ArchiveWorkerRequest {
+        protocol_version: 1,
+        run_id: "run_1".into(),
+        operation: ArchiveWorkerOperation::CREATE,
+        scratch_dir: "/scratch".into(),
+        scratch_identity: WorkerDirectoryIdentity {
+            device: 1,
+            inode: 3,
+        },
+        owner_lock: "/owner.lock".into(),
+        owner_lock_identity: WorkerDirectoryIdentity {
+            device: 1,
+            inode: 4,
+        },
+        repository_max_bytes: 16 * 1024 * 1024,
         state_dir: "/state".into(),
         archive_dir: "/archive".into(),
         repository_dir: "/repository".into(),
@@ -67,6 +82,9 @@ fn reads_exact_bounded_request_and_rejects_trailing_or_unknown_data() {
 #[test]
 fn writes_length_framed_bounded_report() {
     let report = ArchiveWorkerReport {
+        protocol_version: 1,
+        run_id: "run_1".into(),
+        repository_bytes: 1024,
         stage_id: "stage_1".into(),
         native_snapshot_id: "snapshot_1".into(),
         manifest_digest: "sha256:example".into(),

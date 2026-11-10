@@ -21,6 +21,9 @@ pub struct WorkerDirectoryIdentity {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArchiveWorkerRequest {
+    pub protocol_version: u32,
+    pub run_id: String,
+    pub operation: ArchiveWorkerOperation,
     pub state_dir: PathBuf,
     pub archive_dir: PathBuf,
     pub stage_binding: ArchiveStageBinding,
@@ -28,9 +31,31 @@ pub struct ArchiveWorkerRequest {
     pub source_limits: ArchiveDiskLimits,
     pub repository_dir: PathBuf,
     pub repository_identity: WorkerDirectoryIdentity,
+    pub scratch_dir: PathBuf,
+    pub scratch_identity: WorkerDirectoryIdentity,
+    pub owner_lock: PathBuf,
+    pub owner_lock_identity: WorkerDirectoryIdentity,
     pub repository_password: String,
+    pub repository_max_bytes: u64,
     pub memory_max_bytes: u64,
     pub timeout_seconds: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[allow(non_camel_case_types)]
+pub enum ArchiveWorkerOperation {
+    CREATE,
+    VERIFY,
+}
+
+impl ArchiveWorkerOperation {
+    pub fn get_name(self) -> &'static str {
+        match self {
+            Self::CREATE => "create",
+            Self::VERIFY => "verify",
+        }
+    }
 }
 
 impl Drop for ArchiveWorkerRequest {
@@ -43,12 +68,15 @@ impl Drop for ArchiveWorkerRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArchiveWorkerReport {
+    pub protocol_version: u32,
+    pub run_id: String,
     pub stage_id: String,
     pub native_snapshot_id: String,
     pub manifest_digest: String,
     pub entry_count: u64,
     pub file_count: u64,
     pub payload_bytes: u64,
+    pub repository_bytes: u64,
 }
 
 #[derive(Debug)]
@@ -125,14 +153,14 @@ mod linux {
     use std::collections::BTreeMap;
     use std::fs;
     use std::os::fd::AsRawFd;
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use std::os::unix::fs::MetadataExt;
     use std::path::{Component, Path, PathBuf};
     use std::time::{Duration, Instant};
 
     use rustic_backend::BackendOptions;
     use rustic_core::{
-        BackupOptions, ConfigOptions, Credentials, KeyOptions, ParentOptions, ReadSource,
-        Repository, RepositoryOptions, SnapshotOptions,
+        BackupOptions, ConfigOptions, Credentials, KeyOptions, ParentOptions, Repository,
+        RepositoryOptions, SnapshotOptions,
     };
     use zeroize::Zeroizing;
 
@@ -217,77 +245,396 @@ mod linux {
         Ok(scratch)
     }
 
+    struct OwnerLease {
+        file: fs::File,
+        parent: LocalEndpoint,
+        name: std::ffi::CString,
+        identity: FileIdentity,
+    }
+
+    impl OwnerLease {
+        fn check(&self) -> Result<(), WorkerProtocolError> {
+            self.parent
+                .revalidate()
+                .map_err(|_| WorkerProtocolError::IO)?;
+            let mut value = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: the pinned directory, single component, and output storage are live.
+            if unsafe {
+                libc::fstatat(
+                    self.parent.directory().as_raw_fd(),
+                    self.name.as_ptr(),
+                    value.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            } != 0
+            {
+                return Err(WorkerProtocolError::IO);
+            }
+            // SAFETY: successful fstatat initialized value.
+            let value = unsafe { value.assume_init() };
+            if value.st_dev != self.identity.device
+                || value.st_ino != self.identity.inode
+                || value.st_mode & libc::S_IFMT != libc::S_IFREG
+            {
+                return Err(WorkerProtocolError::IO);
+            }
+            let metadata = self.file.metadata().map_err(|_| WorkerProtocolError::IO)?;
+            if metadata.dev() != self.identity.device
+                || metadata.ino() != self.identity.inode
+                || metadata.len() != 0
+                || metadata.nlink() != 1
+                || metadata.mode() & 0o7777 != 0o600
+            {
+                return Err(WorkerProtocolError::IO);
+            }
+            Ok(())
+        }
+    }
+
+    fn open_regular(
+        parent: &fs::File,
+        name: &std::ffi::CStr,
+    ) -> Result<fs::File, WorkerProtocolError> {
+        use std::os::fd::FromRawFd;
+        // SAFETY: O_PATH pins this component without opening a potential device driver.
+        let fd = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(WorkerProtocolError::IO);
+        }
+        // SAFETY: the fresh descriptor is transferred exactly once to File.
+        let pinned = unsafe { fs::File::from_raw_fd(fd) };
+        let metadata = pinned.metadata().map_err(|_| WorkerProtocolError::IO)?;
+        // SAFETY: geteuid has no arguments or retained memory.
+        if !metadata.is_file()
+            || metadata.nlink() != 1
+            || metadata.uid() != unsafe { libc::geteuid() }
+        {
+            return Err(WorkerProtocolError::IO);
+        }
+        let file = fs::File::open(format!("/proc/self/fd/{}", pinned.as_raw_fd()))
+            .map_err(|_| WorkerProtocolError::IO)?;
+        let actual = file.metadata().map_err(|_| WorkerProtocolError::IO)?;
+        if actual.dev() != metadata.dev() || actual.ino() != metadata.ino() {
+            return Err(WorkerProtocolError::IO);
+        }
+        Ok(file)
+    }
+
+    fn acquire_owner(
+        request: &ArchiveWorkerRequest,
+        container_identity: &str,
+    ) -> Result<OwnerLease, WorkerProtocolError> {
+        use std::os::unix::ffi::OsStrExt;
+        let parent_path = request
+            .owner_lock
+            .parent()
+            .ok_or(WorkerProtocolError::INVALID)?;
+        if request.repository_dir.parent() != Some(parent_path)
+            || request.scratch_dir.parent() != Some(parent_path)
+        {
+            return Err(WorkerProtocolError::INVALID);
+        }
+        let parent = get_endpoint(parent_path)?;
+        if get_identity_text(parent.identity()) != container_identity {
+            return Err(WorkerProtocolError::STATE);
+        }
+        let name = std::ffi::CString::new(
+            request
+                .owner_lock
+                .file_name()
+                .ok_or(WorkerProtocolError::INVALID)?
+                .as_bytes(),
+        )
+        .map_err(|_| WorkerProtocolError::INVALID)?;
+        let file = open_regular(parent.directory(), &name)?;
+        let identity = FileIdentity {
+            device: request.owner_lock_identity.device,
+            inode: request.owner_lock_identity.inode,
+        };
+        let lease = OwnerLease {
+            file,
+            parent,
+            name,
+            identity,
+        };
+        lease.check()?;
+        lease
+            .file
+            .try_lock()
+            .map_err(|_| WorkerProtocolError::STATE)?;
+        lease.check()?;
+        Ok(lease)
+    }
+
+    fn get_identity_text(identity: FileIdentity) -> String {
+        format!("unix:{}:{}", identity.device, identity.inode)
+    }
+
+    fn sync_repository(
+        endpoint: &LocalEndpoint,
+        maximum_bytes: u64,
+        guard: &StageGuard,
+    ) -> Result<u64, WorkerProtocolError> {
+        use std::os::fd::FromRawFd;
+        use std::os::unix::ffi::OsStrExt;
+        fn check_generation(
+            before: &fs::Metadata,
+            after: &fs::Metadata,
+        ) -> Result<(), WorkerProtocolError> {
+            if before.dev() != after.dev()
+                || before.ino() != after.ino()
+                || before.len() != after.len()
+                || before.mtime() != after.mtime()
+                || before.mtime_nsec() != after.mtime_nsec()
+                || before.ctime() != after.ctime()
+                || before.ctime_nsec() != after.ctime_nsec()
+            {
+                return Err(WorkerProtocolError::IO);
+            }
+            Ok(())
+        }
+        fn check_entry(
+            parent: &fs::File,
+            name: &std::ffi::CStr,
+            expected: &fs::Metadata,
+        ) -> Result<(), WorkerProtocolError> {
+            let mut value = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: the pinned parent, single component, and output storage remain live.
+            if unsafe {
+                libc::fstatat(
+                    parent.as_raw_fd(),
+                    name.as_ptr(),
+                    value.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            } != 0
+            {
+                return Err(WorkerProtocolError::IO);
+            }
+            // SAFETY: successful fstatat initialized the output.
+            let value = unsafe { value.assume_init() };
+            if value.st_dev != expected.dev()
+                || value.st_ino != expected.ino()
+                || value.st_mode & libc::S_IFMT != expected.mode() & libc::S_IFMT
+            {
+                return Err(WorkerProtocolError::IO);
+            }
+            Ok(())
+        }
+        fn visit(
+            directory: &fs::File,
+            device: u64,
+            depth: usize,
+            count: &mut u64,
+            total_bytes: &mut u64,
+            maximum_bytes: u64,
+            guard: &StageGuard,
+        ) -> Result<(), WorkerProtocolError> {
+            if depth > 4 {
+                return Err(WorkerProtocolError::RESOURCE);
+            }
+            let directory_before = directory.metadata().map_err(|_| WorkerProtocolError::IO)?;
+            let entries = fs::read_dir(format!("/proc/self/fd/{}", directory.as_raw_fd()))
+                .map_err(|_| WorkerProtocolError::IO)?;
+            for entry in entries {
+                guard.check().map_err(|_| WorkerProtocolError::RESOURCE)?;
+                let entry = entry.map_err(|_| WorkerProtocolError::IO)?;
+                *count = count.checked_add(1).ok_or(WorkerProtocolError::RESOURCE)?;
+                if *count > 10_000 {
+                    return Err(WorkerProtocolError::RESOURCE);
+                }
+                let name = entry.file_name();
+                let name =
+                    std::ffi::CString::new(name.as_bytes()).map_err(|_| WorkerProtocolError::IO)?;
+                let kind = entry.file_type().map_err(|_| WorkerProtocolError::IO)?;
+                if kind.is_dir() {
+                    // SAFETY: the directory descriptor and component are valid and no-follow.
+                    let fd = unsafe {
+                        libc::openat(
+                            directory.as_raw_fd(),
+                            name.as_ptr(),
+                            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        )
+                    };
+                    if fd < 0 {
+                        return Err(WorkerProtocolError::IO);
+                    }
+                    // SAFETY: the fresh descriptor is transferred exactly once to File.
+                    let child = unsafe { fs::File::from_raw_fd(fd) };
+                    let metadata = child.metadata().map_err(|_| WorkerProtocolError::IO)?;
+                    check_entry(directory, &name, &metadata)?;
+                    if metadata.dev() != device {
+                        return Err(WorkerProtocolError::IO);
+                    }
+                    visit(
+                        &child,
+                        device,
+                        depth + 1,
+                        count,
+                        total_bytes,
+                        maximum_bytes,
+                        guard,
+                    )?;
+                    check_entry(directory, &name, &metadata)?;
+                } else if kind.is_file() {
+                    let file = open_regular(directory, &name)?;
+                    let before = file.metadata().map_err(|_| WorkerProtocolError::IO)?;
+                    check_entry(directory, &name, &before)?;
+                    if before.dev() != device {
+                        return Err(WorkerProtocolError::IO);
+                    }
+                    *total_bytes = total_bytes
+                        .checked_add(before.len())
+                        .ok_or(WorkerProtocolError::RESOURCE)?;
+                    if *total_bytes > maximum_bytes {
+                        return Err(WorkerProtocolError::RESOURCE);
+                    }
+                    file.sync_all().map_err(|_| WorkerProtocolError::IO)?;
+                    let after = file.metadata().map_err(|_| WorkerProtocolError::IO)?;
+                    check_generation(&before, &after)?;
+                    check_entry(directory, &name, &after)?;
+                } else {
+                    return Err(WorkerProtocolError::IO);
+                }
+            }
+            directory.sync_all().map_err(|_| WorkerProtocolError::IO)?;
+            check_generation(
+                &directory_before,
+                &directory.metadata().map_err(|_| WorkerProtocolError::IO)?,
+            )
+        }
+        endpoint.revalidate().map_err(|_| WorkerProtocolError::IO)?;
+        let mut count = 0;
+        let mut total_bytes = 0;
+        visit(
+            endpoint.directory(),
+            endpoint.identity().device,
+            0,
+            &mut count,
+            &mut total_bytes,
+            maximum_bytes,
+            guard,
+        )?;
+        endpoint.revalidate().map_err(|_| WorkerProtocolError::IO)?;
+        Ok(total_bytes)
+    }
+
     pub fn execute_archive(
         request: &ArchiveWorkerRequest,
     ) -> Result<ArchiveWorkerReport, WorkerProtocolError> {
+        use super::ArchiveWorkerOperation;
+        use crate::archive_backend::ArchiveBudgetBackend;
+        use rustic_core::{LsOptions, RepositoryBackends};
+        use std::sync::Arc;
         crate::worker_runtime::verify_worker_envelope(request.memory_max_bytes)
             .map_err(|_| WorkerProtocolError::ENVELOPE)?;
-        if request.timeout_seconds == 0
+        if request.protocol_version != 1
+            || request.timeout_seconds == 0
             || request.timeout_seconds > 900
             || request.repository_password.is_empty()
             || request.repository_password.len() > 4096
+            || request.repository_max_bytes == 0
+            || request.repository_max_bytes > 512 * 1024 * 1024
         {
             return Err(WorkerProtocolError::INVALID);
         }
         for path in [
             &request.state_dir,
-            &request.archive_dir,
             &request.repository_dir,
+            &request.scratch_dir,
+            &request.owner_lock,
         ] {
             check_path(path)?;
         }
         let state_endpoint = get_endpoint(&request.state_dir)?;
-        let archive_endpoint = get_endpoint(&request.archive_dir)?;
         let repo_endpoint = get_endpoint(&request.repository_dir)?;
+        let scratch_endpoint = get_endpoint(&request.scratch_dir)?;
         if repo_endpoint.identity()
             != (FileIdentity {
                 device: request.repository_identity.device,
                 inode: request.repository_identity.inode,
             })
+            || scratch_endpoint.identity()
+                != (FileIdentity {
+                    device: request.scratch_identity.device,
+                    inode: request.scratch_identity.inode,
+                })
         {
-            return Err(WorkerProtocolError::INVALID);
+            return Err(WorkerProtocolError::STATE);
         }
-        get_disjoint_scope_evidence(&[&state_endpoint, &archive_endpoint, &repo_endpoint])
+        get_disjoint_scope_evidence(&[&state_endpoint, &repo_endpoint, &scratch_endpoint])
             .map_err(|_| WorkerProtocolError::INVALID)?;
-        let meta = repo_endpoint
-            .directory()
-            .metadata()
-            .map_err(|_| WorkerProtocolError::IO)?;
-        // SAFETY: geteuid has no arguments and reads the process identity.
-        if meta.uid() != unsafe { libc::geteuid() } || meta.permissions().mode() & 0o7777 != 0o700 {
-            return Err(WorkerProtocolError::INVALID);
-        }
-        let proc_path = format!("/proc/self/fd/{}", repo_endpoint.directory().as_raw_fd());
-        if fs::read_dir(&proc_path)
-            .map_err(|_| WorkerProtocolError::IO)?
-            .next()
-            .is_some()
-        {
-            return Err(WorkerProtocolError::INVALID);
-        }
         let state = StateStore::open_readonly(&request.state_dir)
             .map_err(|_| WorkerProtocolError::STATE)?;
+        let run = state
+            .get_native_run(&request.run_id)
+            .map_err(|_| WorkerProtocolError::STATE)?
+            .ok_or(WorkerProtocolError::STATE)?;
         let stage = state
             .get_archive_stage(&request.stage_binding.stage_id)
             .map_err(|_| WorkerProtocolError::STATE)?
             .ok_or(WorkerProtocolError::STATE)?;
-        if stage.effect_state != "sealed" || stage.binding != request.stage_binding {
+        if run.effect_state != "running"
+            || run.active_operation.as_deref() != Some(request.operation.get_name())
+            || run.binding.stage_id != stage.binding.stage_id
+            || run.source_catalog_digest
+                != stage
+                    .catalog_ciphertext_digest
+                    .clone()
+                    .ok_or(WorkerProtocolError::STATE)?
+            || run.repository_identity.as_deref()
+                != Some(get_identity_text(repo_endpoint.identity()).as_str())
+            || run.scratch_identity.as_deref()
+                != Some(get_identity_text(scratch_endpoint.identity()).as_str())
+            || run.owner_lock_identity.as_deref()
+                != Some(
+                    get_identity_text(FileIdentity {
+                        device: request.owner_lock_identity.device,
+                        inode: request.owner_lock_identity.inode,
+                    })
+                    .as_str(),
+                )
+            || stage.effect_state != "sealed"
+            || stage.binding != request.stage_binding
+        {
+            return Err(WorkerProtocolError::STATE);
+        }
+        let owner = acquire_owner(
+            request,
+            run.container_identity
+                .as_deref()
+                .ok_or(WorkerProtocolError::STATE)?,
+        )?;
+        if state
+            .get_native_run(&request.run_id)
+            .map_err(|_| WorkerProtocolError::STATE)?
+            .as_ref()
+            != Some(&run)
+        {
             return Err(WorkerProtocolError::STATE);
         }
         let capture = state
             .get_capture(&stage.binding.capture_id)
             .map_err(|_| WorkerProtocolError::STATE)?
             .ok_or(WorkerProtocolError::STATE)?;
-        let count: u64 = stage
+        let count = run
             .manifest_entry_count
-            .parse()
+            .parse::<u64>()
+            .map_err(|_| WorkerProtocolError::STATE)?;
+        let total_bytes = run
+            .payload_bytes
+            .parse::<u64>()
             .map_err(|_| WorkerProtocolError::STATE)?;
         if count == 0
             || count > 10_000
-            || capture.manifest_digest.as_deref() != Some(stage.manifest_digest.as_str())
-            || capture.manifest_entry_count.as_deref() != Some(stage.manifest_entry_count.as_str())
-            || capture.payload_artifact_id.as_deref()
-                != Some(stage.binding.payload_artifact_id.as_str())
+            || capture.manifest_digest.as_deref() != Some(run.manifest_digest.as_str())
+            || capture.manifest_entry_count.as_deref() != Some(run.manifest_entry_count.as_str())
         {
             return Err(WorkerProtocolError::STATE);
         }
@@ -295,9 +642,6 @@ mod linux {
             deadline: Instant::now().checked_add(Duration::from_secs(request.timeout_seconds)),
             ..StageGuard::default()
         };
-        if guard.deadline.is_none() {
-            return Err(WorkerProtocolError::INVALID);
-        }
         let pool = ResourcePool::new(
             ResourceClass::BALANCED,
             std::thread::available_parallelism().map_or(1, usize::from),
@@ -305,94 +649,143 @@ mod linux {
         let job = pool
             .admit_job(&capture.binding.job_id, &guard)
             .map_err(|_| WorkerProtocolError::RESOURCE)?;
-        let disk = ArchiveDiskStore::new(archive_endpoint, &stage.binding.storage_endpoint_id)
-            .map_err(|_| WorkerProtocolError::STATE)?;
         let key = Zeroizing::new(request.archive_key);
-        let source = disk
-            .reopen_source(
-                &state,
-                ArchiveDiskRequest {
-                    binding: &request.stage_binding,
-                    key: &key,
-                    limits: request.source_limits,
-                    guard: &guard,
-                },
-                &job,
-            )
-            .map_err(|_| WorkerProtocolError::STATE)?;
-        let mut source_encodings = BTreeMap::new();
-        for item in source.entries() {
-            guard.check().map_err(|_| WorkerProtocolError::RESOURCE)?;
-            let item = item.map_err(|_| WorkerProtocolError::STATE)?;
-            if item.path.parent() == Some(Path::new("sources")) {
-                if !item.node.is_dir() {
-                    return Err(WorkerProtocolError::STATE);
-                }
-                let id = item
-                    .path
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .ok_or(WorkerProtocolError::STATE)?;
-                if source_encodings
-                    .insert(id.to_owned(), "unix_bytes".to_owned())
-                    .is_some()
-                    || source_encodings.len() > 1024
-                {
-                    return Err(WorkerProtocolError::STATE);
-                }
-            }
-        }
-        if source_encodings.is_empty() {
-            return Err(WorkerProtocolError::STATE);
-        }
-        repo_endpoint
-            .revalidate()
-            .map_err(|_| WorkerProtocolError::IO)?;
+        let can_create = request.operation == ArchiveWorkerOperation::CREATE;
         let repository_path = request
             .repository_dir
             .to_str()
             .ok_or(WorkerProtocolError::INVALID)?;
-        let backends = BackendOptions::default()
+        let native = BackendOptions::default()
             .repository(repository_path)
             .to_backends()
             .map_err(|_| WorkerProtocolError::ENGINE)?;
+        let budget = ArchiveBudgetBackend::new(
+            native.repository(),
+            request.repository_max_bytes,
+            can_create,
+            guard.clone(),
+        )
+        .map_err(|_| WorkerProtocolError::RESOURCE)?;
+        let backends = RepositoryBackends::new(Arc::new(budget), None);
         let options = RepositoryOptions::default().no_cache(true);
         let credentials = Credentials::password(request.repository_password.as_str());
-        let repository = Repository::new(&options, &backends)
-            .map_err(|_| WorkerProtocolError::ENGINE)?
-            .init(
-                &credentials,
-                &KeyOptions::default(),
-                &ConfigOptions::default().set_version(2),
-            )
-            .map_err(|_| WorkerProtocolError::ENGINE)?
-            .to_indexed_ids()
-            .map_err(|_| WorkerProtocolError::ENGINE)?;
-        let mut backup = BackupOptions::default();
-        backup.parent_opts = ParentOptions::default().force(true);
-        let snapshot = repository
-            .archive(
-                &backup,
-                &source,
-                SnapshotOptions::default()
-                    .to_snapshot()
-                    .map_err(|_| WorkerProtocolError::ENGINE)?,
-                &[PathBuf::from("sources")],
-            )
-            .map_err(|_| WorkerProtocolError::ENGINE)?;
-        drop(repository);
-        drop(source);
-        guard.check().map_err(|_| WorkerProtocolError::RESOURCE)?;
-        repo_endpoint
-            .revalidate()
+        let run_tag = format!("relic-run-{}", request.run_id);
+        let stage_tag = format!("relic-stage-{}", stage.binding.stage_id);
+        if can_create {
+            let mut entries = fs::read_dir(format!(
+                "/proc/self/fd/{}",
+                repo_endpoint.directory().as_raw_fd()
+            ))
             .map_err(|_| WorkerProtocolError::IO)?;
+            if entries.next().is_some() {
+                return Err(WorkerProtocolError::STATE);
+            }
+            check_path(&request.archive_dir)?;
+            let archive_endpoint = get_endpoint(&request.archive_dir)?;
+            get_disjoint_scope_evidence(&[
+                &state_endpoint,
+                &archive_endpoint,
+                &repo_endpoint,
+                &scratch_endpoint,
+            ])
+            .map_err(|_| WorkerProtocolError::INVALID)?;
+            let disk = ArchiveDiskStore::new(archive_endpoint, &stage.binding.storage_endpoint_id)
+                .map_err(|_| WorkerProtocolError::STATE)?;
+            let source = disk
+                .reopen_source(
+                    &state,
+                    ArchiveDiskRequest {
+                        binding: &request.stage_binding,
+                        key: &key,
+                        limits: request.source_limits,
+                        guard: &guard,
+                    },
+                    &job,
+                )
+                .map_err(|_| WorkerProtocolError::STATE)?;
+            let repository = Repository::new(&options, &backends)
+                .map_err(|_| WorkerProtocolError::ENGINE)?
+                .init(
+                    &credentials,
+                    &KeyOptions::default(),
+                    &ConfigOptions::default().set_version(2),
+                )
+                .map_err(|_| WorkerProtocolError::ENGINE)?
+                .to_indexed_ids()
+                .map_err(|_| WorkerProtocolError::ENGINE)?;
+            let mut backup = BackupOptions::default();
+            backup.parent_opts = ParentOptions::default().force(true);
+            let snapshot_options = SnapshotOptions::default()
+                .add_tags(&run_tag)
+                .map_err(|_| WorkerProtocolError::INVALID)?
+                .add_tags(&stage_tag)
+                .map_err(|_| WorkerProtocolError::INVALID)?;
+            repository
+                .archive(
+                    &backup,
+                    &source,
+                    snapshot_options
+                        .to_snapshot()
+                        .map_err(|_| WorkerProtocolError::ENGINE)?,
+                    &[PathBuf::from("sources")],
+                )
+                .map_err(|_| WorkerProtocolError::ENGINE)?;
+            drop(repository);
+            drop(source);
+        }
+        owner.check()?;
+        guard.check().map_err(|_| WorkerProtocolError::RESOURCE)?;
         let repository = Repository::new(&options, &backends)
             .map_err(|_| WorkerProtocolError::ENGINE)?
             .open(&credentials)
             .map_err(|_| WorkerProtocolError::ENGINE)?
             .to_indexed()
             .map_err(|_| WorkerProtocolError::ENGINE)?;
-        let verification_reservation = job
+        let mut snapshots = repository
+            .get_all_snapshots()
+            .map_err(|_| WorkerProtocolError::ENGINE)?;
+        if snapshots.len() != 1 {
+            return Err(WorkerProtocolError::VERIFICATION);
+        }
+        let snapshot = snapshots.pop().ok_or(WorkerProtocolError::VERIFICATION)?;
+        if !snapshot.tags.contains(&run_tag)
+            || !snapshot.tags.contains(&stage_tag)
+            || run
+                .native_snapshot_id
+                .as_deref()
+                .is_some_and(|id| id != snapshot.id.to_hex().as_str())
+        {
+            return Err(WorkerProtocolError::VERIFICATION);
+        }
+        let root = repository
+            .node_from_snapshot_and_path(&snapshot, "sources")
+            .map_err(|_| WorkerProtocolError::VERIFICATION)?;
+        let mut source_encodings = BTreeMap::new();
+        let mut list_options = LsOptions::default();
+        list_options.recursive = false;
+        for entry in repository
+            .ls(&root, &list_options)
+            .map_err(|_| WorkerProtocolError::VERIFICATION)?
+        {
+            let (path, node) = entry.map_err(|_| WorkerProtocolError::VERIFICATION)?;
+            if path.as_os_str().is_empty() {
+                continue;
+            }
+            if !node.is_dir() || path.components().count() != 1 || source_encodings.len() >= 1024 {
+                return Err(WorkerProtocolError::VERIFICATION);
+            }
+            let id = path
+                .to_str()
+                .ok_or(WorkerProtocolError::VERIFICATION)?
+                .to_owned();
+            if source_encodings
+                .insert(id, "unix_bytes".to_owned())
+                .is_some()
+            {
+                return Err(WorkerProtocolError::VERIFICATION);
+            }
+        }
+        let _verification_reservation = job
             .reserve_stage(
                 None,
                 Demand {
@@ -405,10 +798,12 @@ mod linux {
                 &guard,
             )
             .map_err(|_| WorkerProtocolError::RESOURCE)?;
-        let scratch = create_scratch(&repo_endpoint, &request.repository_dir)?;
+        let scratch = create_scratch(&scratch_endpoint, &request.scratch_dir)?;
+        let mut sorter_key = Zeroizing::new([0; 32]);
+        getrandom::fill(sorter_key.as_mut()).map_err(|_| WorkerProtocolError::RESOURCE)?;
         let mut sorter = EncryptedManifestSort::create(
             &scratch.path,
-            &key,
+            &sorter_key,
             SortLimits {
                 max_entries: count,
                 max_frame_bytes: 256 * 1024,
@@ -423,13 +818,9 @@ mod linux {
         )
         .map_err(|_| WorkerProtocolError::RESOURCE)?;
         let expected = ManifestArtifact {
-            digest: stage.manifest_digest.clone(),
+            digest: run.manifest_digest,
             entry_count: count,
         };
-        let total_bytes: u64 = stage
-            .payload_bytes
-            .parse()
-            .map_err(|_| WorkerProtocolError::STATE)?;
         let report = verify_snapshot(
             &repository,
             &snapshot,
@@ -454,18 +845,20 @@ mod linux {
         )
         .map_err(|_| WorkerProtocolError::VERIFICATION)?;
         drop(sorter);
-        drop(scratch);
-        drop(verification_reservation);
-        repo_endpoint
-            .revalidate()
-            .map_err(|_| WorkerProtocolError::IO)?;
+        let repository_bytes =
+            sync_repository(&repo_endpoint, request.repository_max_bytes, &guard)?;
+        owner.check()?;
+        guard.check().map_err(|_| WorkerProtocolError::RESOURCE)?;
         Ok(ArchiveWorkerReport {
+            protocol_version: 1,
+            run_id: request.run_id.clone(),
             stage_id: stage.binding.stage_id,
             native_snapshot_id: snapshot.id.to_hex().to_string(),
             manifest_digest: report.manifest.digest,
             entry_count: report.manifest.entry_count,
             file_count: report.file_count,
             payload_bytes: report.payload_bytes,
+            repository_bytes,
         })
     }
 }

@@ -421,6 +421,10 @@ pub struct ActiveJob {
 }
 
 impl ActiveJob {
+    pub fn get_job_id(&self) -> &str {
+        &self.lease.job_id
+    }
+
     pub fn reserve_stage(
         &self,
         endpoint_id: Option<&str>,
