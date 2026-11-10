@@ -1511,7 +1511,7 @@ pub(crate) fn validate_capture_binding(binding: &CaptureBinding) -> Result<(), S
     Ok(())
 }
 
-fn valid_identifier_text(text: &str) -> bool {
+pub(crate) fn valid_identifier_text(text: &str) -> bool {
     let mut bytes = text.bytes();
     !text.is_empty()
         && text.len() <= 128

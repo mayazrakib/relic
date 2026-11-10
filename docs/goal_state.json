@@ -325,15 +325,16 @@
         "docs/evidence/artifact_store.json",
         "docs/evidence/payload_capture.json",
         "docs/evidence/payload_store.json",
-        "docs/evidence/restore_store.json"
+        "docs/evidence/restore_store.json",
+        "docs/evidence/multipass_sort.json"
     ],
     "blockers": [],
-    "next_action": "Push private restore milestone and observe native CI without restarting. Implement general bounded multipass encrypted ordering and large-source staging/streaming; integrate archive execution with owned capture and restore. Unify opaque endpoint ID grammar, finish cleanup/key lifecycle and close engine memory/cancellation/fencing before enabled daemon jobs. Preserve every full-system acceptance gate with1GiB/high768MiB/no swap and at most one worker.",
+    "next_action": "Push multipass milestone and observe native CI without restarting. Implement a runtime frozen-capture ReadSource proof and full native staged snapshot-to-logical-manifest verification; SDK success can omit source/read errors. Establish bounded per-file capture locators, worker resource/cancellation containment and sole-credential fenced mutation/publication before enabled archive jobs. Large-source staging and all remaining full-system gates stay required under1GiB/high768MiB/no swap and at most one worker.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "e86addd33817eb4ad870aa385eb92f66cbb227d8448d1572cd54b6df5067e0a1",
+    "source_fingerprint": "3538808c7d3fa9d937b37ae1407ab0c6c742cba2c34fa32800454ab23b978d08",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -686,17 +687,49 @@
                 "docs/evidence/restore_store.json"
             ],
             "limits": "Linux process-boundary proof only pending fresh native CI; no Windows, selective restore, original metadata, cleanup or standard-archive adapter qualification"
+        },
+        {
+            "name": "Bounded tiered encrypted manifest compaction",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/encrypted_manifest_sort/unix.rs",
+                "tests/encrypted_manifest_sort.rs",
+                "docs/encrypted_manifest_sort.md",
+                "docs/evidence/multipass_sort.json"
+            ],
+            "limits": "Disposable runs, no durable crash cleanup or Windows ordering;8MiB estimate and fixture rewrite bound are not sustained physical-footprint qualification"
+        },
+        {
+            "name": "Schema-valid opaque endpoint IDs in filesystem stores",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/endpoint_identifiers.rs",
+                "docs/evidence/multipass_sort.json"
+            ],
+            "limits": "Generated artifact/restore filenames retain stricter ID grammar"
+        },
+        {
+            "name": "Pinned archive source omission and publication boundary audit",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "docs/archive_staging_feasibility.md",
+                "docs/evidence/multipass_sort.json"
+            ],
+            "limits": "Static source evidence only; SDK skips errors and cannot establish completeness without independent expected-manifest verification"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented schema5 restore intents, physical target reservations, leased authenticated payload reads, bounded private rooted-tree reconstruction, output readback, inventory verification, no-overwrite native rename and crash reconciliation. All134 tests pass, zero ignored; Clippy and formatting pass. Test peak674.6M, Clippy241.3M, zero swap. Priorcba4d76 native CI passed all three targets; current restore native execution pending. User confirmed overnight pursuit of complete system; full goal remains active."
+        "result": "Implemented tiered bounded encrypted multipass sorting, checked peak/cumulative reservations, strict final authentication and failure poisoning, inode-safe cleanup and opaque endpoint ID compatibility. All143 tests pass, zero ignored; Clippy/formatting pass. Test peak678.4M, Clippy251.9M, zero swap. Prior03bc486 native CI passed all targets. Static audit found SDK skip-on-error and missing local parent fsync; archive execution remains gated pending complete snapshot verification and resource/fencing qualification. Full goal remains active."
     },
     "remote_checkpoint": {
-        "commit": "cba4d767fe1d96ea50dd6205842b594d5d9dd57c",
+        "commit": "03bc486e6111fd0d8d0519a712b53547d750f002",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42817839865,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42817839865",
+        "native_ci_run_id": 42821843753,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42821843753",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -706,10 +739,10 @@
         }
     },
     "prior_native_checkpoint": {
-        "commit": "1da18797a7ecfa2faf115f4213a2aa5b442e2823",
+        "commit": "cba4d767fe1d96ea50dd6205842b594d5d9dd57c",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42815740853,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42815740853",
+        "native_ci_run_id": 42817839865,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42817839865",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -833,5 +866,11 @@
             "status": "resolved",
             "verification": "134-test full suite and warnings-denied Clippy"
         }
-    }
+    },
+    "preserved_worktree_changes": [
+        {
+            "path": "README.md",
+            "description": "Concurrent implementation-branch CI badge edit appeared during this milestone; preserved and excluded from scoped commit."
+        }
+    ]
 }

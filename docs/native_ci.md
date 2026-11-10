@@ -39,3 +39,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 10. Durable Payload Milestone
 
 [Run 42817839865](https://github.com/mayazrakib/relic/actions/runs/42817839865) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `cba4d76`. Unix jobs include payload ownership and process-boundary reconciliation; Windows includes portable journal and migration coverage. New private restore transaction code requires its own native execution. No Windows filesystem restore or complete native backup profile is established by this checkpoint.
+
+## 11. Private Restore Milestone
+
+[Run 42821843753](https://github.com/mayazrakib/relic/actions/runs/42821843753) passed on all three selected targets for `03bc486`. Linux and macOS execute the private restore and no-overwrite publication fixtures; Windows executes portable state and migration tests while filesystem restore remains unavailable. New multipass sorter and endpoint-identifier changes require fresh native execution. These component results do not establish complete archive, restore, or installer acceptance.

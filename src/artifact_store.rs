@@ -259,7 +259,7 @@ mod unix {
 
     impl ArtifactStore {
         pub fn new(endpoint: LocalEndpoint, endpoint_id: &str) -> Result<Self, ArtifactStoreError> {
-            if !is_id(endpoint_id) {
+            if !crate::state::valid_identifier_text(endpoint_id) {
                 return Err(ArtifactStoreError::INVALID);
             }
 
