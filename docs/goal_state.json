@@ -70,7 +70,7 @@
             "heavy_commands": "serialized",
             "linux_enforcement": "systemd-run user transient service with MemoryMax=2G MemorySwapMax=0 TasksMax=128 CPUQuota=200%",
             "probe": "Read memory.max=2147483648 and memory.swap.max=0 from the actual probe process cgroup; probe exited successfully.",
-            "largest_reported_validation_peak": "1.6G"
+            "largest_reported_validation_peak": "2G (enforced aggregate cap, includes file cache; no swap)"
         }
     },
     "tasks": [
@@ -306,15 +306,16 @@
     ],
     "evidence": [
         "docs/evidence/foundation.json",
-        "docs/evidence/embedded_archive.json"
+        "docs/evidence/embedded_archive.json",
+        "docs/evidence/bounded_primitives.json"
     ],
     "blockers": [],
-    "next_action": "Qualify canonical path/bootstrap lock repairs and embedded engine locally under the fixed memory cap; commit and push a new milestone, then inspect fresh native CI rather than retrying unchanged jobs.",
+    "next_action": "Push the tested bounded-primitives milestone to the implementation branch and inspect its fresh native CI. Continue production source authority, encrypted capture staging, resource-pool integration, planner, and destination publication without reducing the complete goal.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "8d81f91a7d2a939d4eafec6bee7e07671273759e64692c425898ac7773f4f135",
+    "source_fingerprint": "45b75c365c6ddceb6945fb6430b9d57ca0ac3f6fec1f04a0b050f77eaa8762c8",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -398,11 +399,13 @@
         },
         {
             "name": "Native CI foundation",
-            "status": "running",
+            "status": "passed",
             "phase": 0,
             "evidence": [
-                ".github/workflows/ci.yml"
-            ]
+                "docs/native_ci.md",
+                "https://github.com/mayazrakib/relic/actions/runs/42796543305"
+            ],
+            "limits": "Foundation commit 925785e only; external engines excluded; no production profiles or later changes qualified"
         },
         {
             "name": "Embedded rustic_core local archive proof",
@@ -413,13 +416,86 @@
                 "docs/embedded_archive.md"
             ],
             "limits": "Small and 1MiB fixture only; no production resource/fencing or broad native profile proof"
+        },
+        {
+            "name": "Streaming logical manifest semantic validation",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/manifest.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Content verification separate; not source snapshot authority"
+        },
+        {
+            "name": "Bounded disposable manifest ordering spool",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/manifest_spool.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Not encrypted or durable publication authority; canonical private parent validation covered"
+        },
+        {
+            "name": "Hierarchical resource reservations and shared buffers",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "tests/resources.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Accounting only; scheduler and adapter callers not integrated"
+        },
+        {
+            "name": "Unix verified regular-file restore and directory traversal",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/restore.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "No metadata/overwrite/engine integration, Windows implementation, or crash cleanup"
+        },
+        {
+            "name": "Best-effort Unix source scanner",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/source_scan.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "No snapshots, links, metadata, device isolation, grants, or resource-pool integration"
+        },
+        {
+            "name": "Independent restic recovery of embedded-produced archive",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "tests/embedded_archive.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Tiny Linux fixture after source removal; no other native independent recovery proof"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Foundation committed and pushed; Linux native CI passed; Windows/macOS exposed initialization portability issues. Repairs and embedded-engine proof pass 30 local tests under 2GiB/no-swap. Fresh native CI required; full goal remains active."
+        "result": "Sixty local tests pass with zero ignored, including both engine interoperability directions. Feature-enabled Clippy and formatting pass. Added bounded manifests/spool, resource reservations, best-effort Unix scanner, and Unix restore primitives; foundation CI passed three native targets. Full-system goal remains active."
     },
     "remote_checkpoint": {
+        "commit": "925785e3f0a8a78e49999d15313bc2d77cb9f636",
+        "branch": "implementation/relic-full-system",
+        "native_ci_run_id": 42796543305,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42796543305",
+        "status": "completed_successfully",
+        "push_transport": "existing authorized SSH credential",
+        "results": {
+            "linux-x86_64": "success",
+            "windows-x86_64": "success",
+            "macos-arm64": "success"
+        }
+    },
+    "prior_native_checkpoint": {
         "commit": "fac92d9f207fb0deead39e6baaa0a38be6d68c1e",
         "branch": "implementation/relic-full-system",
         "native_ci_run_id": 42794446328,

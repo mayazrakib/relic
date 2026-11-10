@@ -5,6 +5,11 @@ pub mod domain;
 #[cfg(feature = "embedded-archive")]
 pub mod embedded_archive;
 pub mod identity;
+pub mod manifest;
+pub mod manifest_spool;
+pub mod resources;
+pub mod restore;
 pub mod scheduler;
 pub mod service;
+pub mod source_scan;
 pub mod state;
