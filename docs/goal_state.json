@@ -1,0 +1,410 @@
+{
+    "schema_version": 1,
+    "objective": "Implement the approved Relic full-system plan without weakening its acceptance gates",
+    "status": "active",
+    "baseline": {
+        "git_head": "e9a496080bd67ea6eae4a8c4dff06e8f5568ac3e",
+        "specification_version": "0.1.0-draft.2",
+        "specification_sha256": "0d3404ca7693b8f2cad0f566fdc4a7b6a0ab77791d59b9e3eb8e58632f0ebee2",
+        "original_untracked": [
+            "SPEC.md"
+        ],
+        "host": {
+            "system": "Linux",
+            "architecture": "x86_64"
+        }
+    },
+    "delivery": {
+        "license": "MIT",
+        "implementation_branch": "implementation/relic-full-system",
+        "primary_branch": "master",
+        "native_targets": [
+            "linux-x86_64",
+            "windows-x86_64",
+            "macos-arm64"
+        ],
+        "snapshot_adapters": [
+            "VSS",
+            "APFS",
+            "Btrfs"
+        ],
+        "databases": [
+            "SQLite",
+            "PostgreSQL",
+            "MySQL"
+        ],
+        "imaging": "nonbootable data volumes and partitions on disposable media",
+        "remote_authority": "milestone commits and pushes to implementation branch only",
+        "excluded": [
+            "bare-metal boot recovery",
+            "additional architectures",
+            "additional providers",
+            "external plugin ecosystem",
+            "master merge",
+            "release publication",
+            "deployment"
+        ]
+    },
+    "controls": {
+        "max_corrective_cycles_per_failure": 2,
+        "max_external_retries": 2,
+        "max_optimization_candidates_per_subsystem": 3,
+        "max_workers": 3,
+        "require_new_evidence_before_retry": true,
+        "reopen_only_if_inputs_change": true,
+        "allow_acceptance_waivers": false,
+        "timeouts_seconds": {
+            "unit": 900,
+            "integration": 1800,
+            "native_package": 3600,
+            "performance_trial": 7200,
+            "fuzz_per_target": 3600,
+            "standalone_soak": 86400,
+            "cluster_soak_per_topology": 21600
+        },
+        "host_memory": {
+            "aggregate_bytes": 2147483648,
+            "swap_bytes": 0,
+            "compiler_jobs": 1,
+            "test_threads": 1,
+            "heavy_commands": "serialized",
+            "linux_enforcement": "systemd-run user transient service with MemoryMax=2G MemorySwapMax=0 TasksMax=128 CPUQuota=200%",
+            "probe": "Read memory.max=2147483648 and memory.swap.max=0 from the actual probe process cgroup; probe exited successfully."
+        }
+    },
+    "tasks": [
+        {
+            "phase": 0,
+            "name": "Baseline and environments",
+            "dependencies": [],
+            "status": "passed",
+            "acceptance": [
+                "Preserve initial source and specification fingerprint",
+                "MIT license and pinned local toolchain",
+                "Native runner inventory and bounded CI authority"
+            ],
+            "attempts": [],
+            "evidence": [
+                "docs/evidence/foundation.json",
+                "LICENSE",
+                ".tool-versions",
+                ".github/workflows/ci.yml"
+            ],
+            "blockers": []
+        },
+        {
+            "phase": 1,
+            "name": "Contracts and feasibility",
+            "dependencies": [
+                0
+            ],
+            "status": "running",
+            "acceptance": [
+                "Executable schemas and all five digest vectors",
+                "Independent encrypted backup/restore on each claimed native target",
+                "Measured archive index/resource and publication boundaries"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 2,
+            "name": "Domain, state, and planning",
+            "dependencies": [
+                1
+            ],
+            "status": "running",
+            "acceptance": [
+                "Typed identities and immutable payload bindings",
+                "Distinct attempt, destination, and occurrence lifecycles",
+                "Durable migration, revision conflicts, intents and receipts"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 3,
+            "name": "Standalone backup and recovery",
+            "dependencies": [
+                1,
+                2
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Local and S3 encrypted archive with metadata reports",
+                "Selective and full restore with traversal defenses",
+                "Offline clean-environment independent recovery"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 4,
+            "name": "Daemon, scheduler, and resource control",
+            "dependencies": [
+                2,
+                3
+            ],
+            "status": "running",
+            "acceptance": [
+                "Authenticated local API and CLI",
+                "Restart, DST, retry and cancellation correctness",
+                "Finite memory, descriptors, streams and spool under fan-out"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 5,
+            "name": "Protection, maintenance, and replication",
+            "dependencies": [
+                3,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Per-destination RPO/RTO and verification freshness",
+                "Guarded retention and last-good protection",
+                "Independent-key replica verified without source access"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 6,
+            "name": "Copy, mirror, synchronization, and continuous operation",
+            "dependencies": [
+                2,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Safe ordinary-file copies and guarded mirror deletions",
+                "Conflict-preserving synchronization and tombstone horizon",
+                "Watcher overflow and periodic reconciliation"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 7,
+            "name": "Native source consistency",
+            "dependencies": [
+                2,
+                3,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "VSS, APFS, and Btrfs native view capture",
+                "Helper ownership and crash cleanup",
+                "Exact achieved consistency and metadata-loss reports"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 8,
+            "name": "Peer cluster and fenced execution",
+            "dependencies": [
+                2,
+                3,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Authenticated enrollment, QUIC, and consensus membership",
+                "Scoped destination gateway admission and receiver fencing",
+                "One/two/three voter fault and uncertainty acceptance"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 9,
+            "name": "Desktop application",
+            "dependencies": [
+                2,
+                4,
+                5
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Native three-tab tray UI independent of daemon",
+                "Inspect plans, restores, health and per-target outcomes",
+                "Theme, keyboard, screen reader, 200-percent text and resource evidence"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 10,
+            "name": "Database and image adapters",
+            "dependencies": [
+                3,
+                7
+            ],
+            "status": "pending",
+            "acceptance": [
+                "SQLite, PostgreSQL and MySQL usable-state restore",
+                "Nonbootable volume/partition image on disposable media",
+                "Wrong-device and complete recovery-set protection"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 11,
+            "name": "Security, performance, and sustained acceptance",
+            "dependencies": [
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Complete native recovery and adversarial corpus",
+                "Bounded fuzz and standalone/cluster soaks",
+                "Cold/warm resource and incremental-detection performance gates"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 12,
+            "name": "Native packaging and final qualification",
+            "dependencies": [
+                11
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Three native installer lifecycle and recovery tests",
+                "SBOM, MIT/dependency notices and artifact/source linkage",
+                "All required conformance evidence passes with no waivers"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        }
+    ],
+    "evidence": [
+        "docs/evidence/foundation.json"
+    ],
+    "blockers": [],
+    "next_action": "Commit and push the qualified foundation milestone; inspect native CI. Continue archive engine resource/publication proofs and real source/destination preflight before enabling jobs.",
+    "current_specification": {
+        "version": "0.1.0-draft.3",
+        "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
+    },
+    "source_fingerprint": "2deb7a6d7b62f1b7f21166086ed7bf10d8701cb4a6ae0f98d4af5159eabf6b41",
+    "work_items": [
+        {
+            "name": "MIT baseline and finite goal controls",
+            "status": "passed",
+            "phase": 0,
+            "evidence": [
+                "LICENSE",
+                "docs/implementation_plan.md"
+            ]
+        },
+        {
+            "name": "Extracted schemas and golden vectors",
+            "status": "passed",
+            "phase": 1,
+            "evidence": [
+                "tests/contracts.rs"
+            ]
+        },
+        {
+            "name": "Typed identities and in-memory lifecycle model",
+            "status": "passed",
+            "phase": 2,
+            "evidence": [
+                "tests/identity.rs",
+                "tests/domain.rs"
+            ]
+        },
+        {
+            "name": "Bounded configuration parser and normalization",
+            "status": "passed",
+            "phase": 2,
+            "evidence": [
+                "tests/config.rs"
+            ]
+        },
+        {
+            "name": "Private SQLite, durable intent binding and receipts",
+            "status": "passed",
+            "phase": 2,
+            "evidence": [
+                "tests/state.rs"
+            ]
+        },
+        {
+            "name": "Bounded calendar projection and catch-up logic",
+            "status": "passed",
+            "phase": 4,
+            "evidence": [
+                "tests/scheduler.rs"
+            ]
+        },
+        {
+            "name": "Unix disabled-job management daemon and CLI",
+            "status": "passed",
+            "phase": 4,
+            "evidence": [
+                "tests/service.rs",
+                "tests/cli.rs"
+            ]
+        },
+        {
+            "name": "Tiny Linux encrypted archive and independent restore proof",
+            "status": "passed",
+            "phase": 1,
+            "evidence": [
+                "tests/archive.rs",
+                "docs/archive_feasibility.md"
+            ]
+        },
+        {
+            "name": "Production archive memory/cancellation/publication proof",
+            "status": "pending",
+            "phase": 1,
+            "evidence": []
+        },
+        {
+            "name": "Native Windows management IPC",
+            "status": "pending",
+            "phase": 4,
+            "evidence": []
+        },
+        {
+            "name": "Native CI foundation",
+            "status": "running",
+            "phase": 0,
+            "evidence": [
+                ".github/workflows/ci.yml"
+            ]
+        }
+    ],
+    "last_goal_turn": {
+        "classification": "progress",
+        "result": "Qualified Rust foundation, durable state, bounded configuration/calendar logic and real Unix CLI/service; 28 tests and Clippy pass under enforced memory envelope. Full-system goal remains active."
+    }
+}

@@ -1,0 +1,14 @@
+{
+    "kind": "plan_entry",
+    "id": "entry_1",
+    "plan_id": "plan_1",
+    "entry_index": "0",
+    "action": "delete",
+    "destination_path": {
+        "encoding": "unix_bytes",
+        "components": [
+            "YS50eHQ"
+        ]
+    },
+    "expected_generation": "generation_1"
+}

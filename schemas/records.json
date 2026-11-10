@@ -1,0 +1,463 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:relic:schema:record:1",
+    "$defs": {
+        "receipt": {
+            "type": "object",
+            "properties": {
+                "record_version": {
+                    "const": 1
+                },
+                "commit_key": {
+                    "type": "object",
+                    "properties": {
+                        "authority_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "occurrence_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "destination_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "authority_id",
+                        "job_id",
+                        "occurrence_id",
+                        "destination_id"
+                    ],
+                    "additionalProperties": false
+                },
+                "payload_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "manifest_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "policy_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "destination_config_revision": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "source_view_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "capture_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "consistency": {
+                    "enum": [
+                        "application_consistent",
+                        "crash_consistent",
+                        "best_effort"
+                    ]
+                },
+                "resource_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "receiver_epoch": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "fence_generation": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "admission_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "repository_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "native_result_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "durability": {
+                    "enum": [
+                        "durable",
+                        "weaker"
+                    ]
+                },
+                "verification": {
+                    "enum": [
+                        "metadata_verified",
+                        "data_verified",
+                        "restore_tested"
+                    ]
+                },
+                "committed_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "Z$",
+                    "maxLength": 40
+                }
+            },
+            "required": [
+                "record_version",
+                "commit_key",
+                "payload_hash",
+                "manifest_digest",
+                "policy_digest",
+                "destination_config_revision",
+                "source_view_id",
+                "capture_id",
+                "consistency",
+                "resource_id",
+                "receiver_epoch",
+                "fence_generation",
+                "admission_id",
+                "native_result_id",
+                "durability",
+                "verification",
+                "committed_at"
+            ],
+            "additionalProperties": false
+        },
+        "checkpoint": {
+            "type": "object",
+            "properties": {
+                "record_version": {
+                    "const": 1
+                },
+                "commit_key": {
+                    "type": "object",
+                    "properties": {
+                        "authority_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "occurrence_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "destination_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "authority_id",
+                        "job_id",
+                        "occurrence_id",
+                        "destination_id"
+                    ],
+                    "additionalProperties": false
+                },
+                "payload_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "manifest_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "policy_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "destination_config_revision": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "consistency": {
+                    "enum": [
+                        "application_consistent",
+                        "crash_consistent",
+                        "best_effort"
+                    ]
+                },
+                "source_view_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "capture_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "endpoint_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "adapter_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "adapter_version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                },
+                "transfer_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "phase": {
+                    "enum": [
+                        "preparing",
+                        "transferring",
+                        "verifying",
+                        "committing",
+                        "post_verifying",
+                        "recovering"
+                    ]
+                },
+                "offset_bytes": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "content_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "expires_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "Z$",
+                    "maxLength": 40
+                }
+            },
+            "required": [
+                "record_version",
+                "commit_key",
+                "payload_hash",
+                "manifest_digest",
+                "policy_digest",
+                "destination_config_revision",
+                "consistency",
+                "source_view_id",
+                "capture_id",
+                "endpoint_id",
+                "adapter_id",
+                "adapter_version",
+                "transfer_id",
+                "phase",
+                "offset_bytes",
+                "content_hash",
+                "expires_at"
+            ],
+            "additionalProperties": false
+        },
+        "manifest_header": {
+            "type": "object",
+            "properties": {
+                "schema_version": {
+                    "const": 1
+                },
+                "capture_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "entry_count": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                }
+            },
+            "required": [
+                "schema_version",
+                "capture_id",
+                "entry_count"
+            ],
+            "additionalProperties": false
+        },
+        "manifest_entry": {
+            "type": "object",
+            "properties": {
+                "source_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "path_encoding": {
+                    "enum": [
+                        "unix_bytes",
+                        "windows_utf16le"
+                    ]
+                },
+                "path": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 1024,
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "maxLength": 131072
+                    }
+                },
+                "kind": {
+                    "enum": [
+                        "file",
+                        "directory",
+                        "symlink",
+                        "hardlink",
+                        "special"
+                    ]
+                },
+                "size_bytes": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "content_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "link_target_base64url": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "maxLength": 131072
+                },
+                "metadata": {
+                    "type": "array",
+                    "maxItems": 1024,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "namespace": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                            },
+                            "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                            },
+                            "value_base64url": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]*$",
+                                "maxLength": 131072
+                            }
+                        },
+                        "required": [
+                            "namespace",
+                            "name",
+                            "value_base64url"
+                        ],
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "required": [
+                "source_id",
+                "path_encoding",
+                "path",
+                "kind",
+                "metadata"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "kind": {
+                                "const": "file"
+                            }
+                        },
+                        "required": [
+                            "kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "size_bytes",
+                            "content_digest"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "kind": {
+                                "enum": [
+                                    "symlink",
+                                    "hardlink"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "link_target_base64url"
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "oneOf": [
+        {
+            "$ref": "#/$defs/receipt"
+        },
+        {
+            "$ref": "#/$defs/checkpoint"
+        }
+    ]
+}

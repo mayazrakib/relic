@@ -1,0 +1,60 @@
+name: CI
+on:
+    push:
+        branches:
+            - implementation/relic-full-system
+    pull_request:
+        branches:
+            - implementation/relic-full-system
+permissions:
+    contents: read
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+jobs:
+    native:
+        name: Native ${{ matrix.platform }}
+        runs-on: ${{ matrix.runner }}
+        timeout-minutes: 45
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - platform: linux-x86_64
+                      runner: ubuntu-24.04
+                    - platform: windows-x86_64
+                      runner: windows-2025
+                    - platform: macos-arm64
+                      runner: macos-15
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check Out Source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - name: Install Rust
+              run: rustup toolchain install 1.98.0 --profile minimal
+            - name: Record Source and Toolchain
+              run: |
+                  mkdir -p ci-evidence
+                  git rev-parse HEAD | tee ci-evidence/source-sha.txt
+                  rustc +1.98.0 -vV | tee ci-evidence/rustc.txt
+                  printf '%s\n' 'External archive engine proof is excluded from this job.' | tee ci-evidence/coverage.txt
+            - name: Build
+              run: |
+                  set -o pipefail
+                  cargo +1.98.0 build --locked --all-targets 2>&1 | tee ci-evidence/build.txt
+            - name: Test
+              run: |
+                  set -o pipefail
+                  cargo +1.98.0 test --locked --all-targets 2>&1 | tee ci-evidence/test.txt
+            - name: Upload Evidence
+              if: always()
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: native-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
+                  path: ci-evidence/
+                  if-no-files-found: warn
+                  retention-days: 14

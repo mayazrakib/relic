@@ -1,0 +1,14 @@
+{
+    "capture_id": "capture_1",
+    "commit_key": {
+        "authority_id": "local_1",
+        "destination_id": "remote_archive",
+        "job_id": "job_1",
+        "occurrence_id": "sha256:5337a0333ec206790cf847d8f0a94f5e29b758698a0d68facf67c7be0e3b7152"
+    },
+    "consistency": "crash_consistent",
+    "destination_config_revision": "1",
+    "manifest_digest": "sha256:e77e8179915ad471fadc683b82f6a8a016c9e11319b14688e10cf37cb45a6d85",
+    "policy_digest": "sha256:c4d15f4d5922d1613a23bfaf394058aa68cf535de5b9fa8ba1d0c3e1b5f84276",
+    "source_view_id": "view_1"
+}

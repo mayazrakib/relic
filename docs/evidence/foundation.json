@@ -1,0 +1,214 @@
+{
+    "schema_version": 1,
+    "recorded_at": "2026-11-10T09:49:18.995291+00:00",
+    "scope": "Foundation component evidence only; no full profile conformance",
+    "source_fingerprint": "2deb7a6d7b62f1b7f21166086ed7bf10d8701cb4a6ae0f98d4af5159eabf6b41",
+    "sources": [
+        {
+            "path": ".cargo/config.toml",
+            "sha256": "8b6bb16262ab5ed26a7dfc9ec8077f46cf4f3aa87a662a823449bbbcadb7d8b5"
+        },
+        {
+            "path": ".github/workflows/ci.yml",
+            "sha256": "64b6494187d3657e6a8ed16e14b5464522bce674a7603fb935ee24cdfd9512c1"
+        },
+        {
+            "path": ".tool-versions",
+            "sha256": "115c61338be28f7a7ef85289a9e934bdcf2dd692a99c9968362da39189d734e3"
+        },
+        {
+            "path": "Cargo.lock",
+            "sha256": "30f0a64c92f4ea6c1ab5708c7a9d328ef6aedec8986b9bb923ef8e6524180ccc"
+        },
+        {
+            "path": "Cargo.toml",
+            "sha256": "e463091c94789b3c3f3648c3b753b709be2d700fa63a81b28eb21af178afd522"
+        },
+        {
+            "path": "SPEC.md",
+            "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
+        },
+        {
+            "path": "database/migrations/00001_initialize.sql",
+            "sha256": "c1627cf07a36f2019e5c31ea925b262b58f7ed608974668454c6b4f8a71491e7"
+        },
+        {
+            "path": "fixtures/contracts/checkpoint.json",
+            "sha256": "bee0e2634a9192ab764a1b75f8b0c00556ae915ea0493367077210045e95009c"
+        },
+        {
+            "path": "fixtures/contracts/manifest_entry.json",
+            "sha256": "0cabeeff2d1bf44e935a551d854340b959b0405c15ee28c16d29b901dee6f8ef"
+        },
+        {
+            "path": "fixtures/contracts/manifest_header.json",
+            "sha256": "09abbb62f2a9065f56900493768c3c7a8aacdcd68d0102a7a09ac6d32196f40c"
+        },
+        {
+            "path": "fixtures/contracts/occurrence.json",
+            "sha256": "d94a478d6f86968abdd4c70ed0072d92d91955e19d421eb07916f7adbda955dc"
+        },
+        {
+            "path": "fixtures/contracts/plan_entry.json",
+            "sha256": "9bb3c698255a799ad513dfe069d9443f0636615e7d2651fe5f786bdadd50da2e"
+        },
+        {
+            "path": "fixtures/contracts/plan_header.json",
+            "sha256": "f36898de9042c02e12266101340383dc5797df65519248ef9e9b1513dcad5683"
+        },
+        {
+            "path": "fixtures/contracts/policy.json",
+            "sha256": "4c3d02bd17c96d3dd63ef3216a5badeb637097fe3fe3e650faef23a9d17216ee"
+        },
+        {
+            "path": "fixtures/contracts/publication.json",
+            "sha256": "35df93e04db6cd34cb8a692755622e9775c3b39e0ab2be93ae3c227ace571f50"
+        },
+        {
+            "path": "fixtures/contracts/receipt.json",
+            "sha256": "0bc762646dfd811983c52a498c2c1399c492b2bd9f12ec927aa38bcbf6b79ea4"
+        },
+        {
+            "path": "schemas/job.json",
+            "sha256": "e28f5f3cbba004f5010d6c50d2b20282ddac9098b0bf0374e53699d5fc0fec6a"
+        },
+        {
+            "path": "schemas/records.json",
+            "sha256": "bbde6c64a1bbccf6bab790da3ebd9d0b504cc5aa7af8b8fe551354f6eb9b88c7"
+        },
+        {
+            "path": "schemas/request.json",
+            "sha256": "fa0bbaf92d738cd5dad79672cbc606fd4a5d5b59c217c00d3d3b9a049c7221b4"
+        },
+        {
+            "path": "schemas/response.json",
+            "sha256": "5896e8950996e5885fbb73a7e07bf147d424a6ca5bf5d76311800f356c7c4f56"
+        },
+        {
+            "path": "src/archive.rs",
+            "sha256": "f27fcd96b26f116f09587d9fbe874c00d708189d6ba68d23021718d2d1094a40"
+        },
+        {
+            "path": "src/bin/relicd.rs",
+            "sha256": "828083834c41c1018718b6ddde9ca6a851706f2e4ee76c76ad38adf4ff0e56ee"
+        },
+        {
+            "path": "src/config.rs",
+            "sha256": "6b365605caf2befcb841c513c234147d267b74c539eb765587eb8eb28c77f103"
+        },
+        {
+            "path": "src/contracts.rs",
+            "sha256": "baf39a6bd9d27a9c5fc0fc77ce46eeecf880ed877339df330abee130af27b004"
+        },
+        {
+            "path": "src/domain.rs",
+            "sha256": "a9988ac232cada5dee1ce16f71c3d24d6e8c2519b2a67a8c2ee274ae20d7322a"
+        },
+        {
+            "path": "src/identity.rs",
+            "sha256": "49428b28785e5c0163cda9020f26b7c42c5efb382d4244e98b4f744634b4f496"
+        },
+        {
+            "path": "src/lib.rs",
+            "sha256": "3eaa74a53dc4f8aa4cc098f8a58b8eb33afcc7fd5d70439e2c1a7cf939c9b5ee"
+        },
+        {
+            "path": "src/main.rs",
+            "sha256": "03cbf2f1c7593b3c716a751eccc5920c8a2a6c1204144c8bf05218470446fe6d"
+        },
+        {
+            "path": "src/scheduler.rs",
+            "sha256": "7d74dce3a0d135cd180272ff23c8756ef92b9d2dfc8008cebdc7eb2212e998bb"
+        },
+        {
+            "path": "src/service.rs",
+            "sha256": "e1ae7a14853e13810ed6c35dfed5d2aec757dd18c8561988c799cca3cc517dbd"
+        },
+        {
+            "path": "src/state.rs",
+            "sha256": "5c4ddbd6758f3af2d566d7c3f498c1f8effdf1aae1b419b856f995b46cd3445c"
+        },
+        {
+            "path": "tests/archive.rs",
+            "sha256": "8b126dc94f7acfbd8eede755a6271376303f5e42dbc2dc1b018d01d89058eeb4"
+        },
+        {
+            "path": "tests/cli.rs",
+            "sha256": "732afa47450021c7c1b9ca3af4a49333f2023a63034c53cc4311eb6b44c97020"
+        },
+        {
+            "path": "tests/config.rs",
+            "sha256": "ece024cff94c46e6906b36939855414b7a5dfb2fbc9d205a3fd1d52a93e4eb08"
+        },
+        {
+            "path": "tests/contracts.rs",
+            "sha256": "5ee8b3153575f19db109bb5d9c8fefbde51da65c50cc144d90e542736f5b3c33"
+        },
+        {
+            "path": "tests/domain.rs",
+            "sha256": "5bdbd21bdd45b6260480ed08c64ff673d6b0bae555987fe171f8da0f92ab1212"
+        },
+        {
+            "path": "tests/identity.rs",
+            "sha256": "251fb52035477200d146bd1c025c7ae4eaa7f6271611951db6eaefb166f15b1e"
+        },
+        {
+            "path": "tests/scheduler.rs",
+            "sha256": "7a9111808644f8d43182030918e5cfae59dce06e2b86108eb889123a2aa699ac"
+        },
+        {
+            "path": "tests/service.rs",
+            "sha256": "616582e3197560bbcefbc641853b182121c6b41c4704674c8619f5fd31873818"
+        },
+        {
+            "path": "tests/state.rs",
+            "sha256": "2a075cf41584ba1910d781b1502890e25bcfedfa8f753f08890bc28abb313c7c"
+        }
+    ],
+    "memory_envelope": {
+        "aggregate_bytes": 2147483648,
+        "swap_bytes": 0,
+        "compiler_jobs": 1,
+        "test_threads": 1,
+        "heavy_commands": "serialized",
+        "linux_enforcement": "systemd-run user transient service with MemoryMax=2G MemorySwapMax=0 TasksMax=128 CPUQuota=200%",
+        "probe": "Read memory.max=2147483648 and memory.swap.max=0 from the actual probe process cgroup; probe exited successfully.",
+        "largest_reported_peak_in_validation": "1.4G during compilation plus all tests, including the external engine proof",
+        "no_swap_verified": true
+    },
+    "checks": [
+        {
+            "command": "cargo test --locked --all-targets -- --include-ignored",
+            "result": "passed",
+            "engine_proof": "restic 0.19.1 encrypted repository checked/restored and independent rustic 0.11.4 restore, tiny fixture only",
+            "tests_passed": 28,
+            "tests_ignored": 0,
+            "reported_memory_peak": "119.8M",
+            "swap_used_bytes": 0
+        },
+        {
+            "command": "cargo clippy --locked --all-targets -- -D warnings",
+            "result": "passed",
+            "reported_memory_peak": "74.8M",
+            "swap_used_bytes": 0
+        },
+        {
+            "command": "cargo fmt --all --check",
+            "result": "passed"
+        },
+        {
+            "command": "actionlint .github/workflows/ci.yml",
+            "result": "passed_by_ci_workstream"
+        }
+    ],
+    "native_ci": "not_yet_executed",
+    "missing_release_evidence": [
+        "full archive engine resource/cancellation/publication proof",
+        "S3 and metadata matrix",
+        "native Windows/macOS recovery and service/UI acceptance",
+        "quorum and destination fencing",
+        "desktop and native helpers",
+        "database and image recovery",
+        "performance, fuzz/soak and installed artifacts"
+    ]
+}

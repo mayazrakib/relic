@@ -1,0 +1,68 @@
+{
+    "destination": {
+        "destination_id": "remote_archive",
+        "endpoint": "object_archive",
+        "endpoint_revision": "1",
+        "repository_id": "repo_1"
+    },
+    "job": {
+        "schema_version": 1,
+        "job_id": "job_1",
+        "revision": 1,
+        "name": "Example",
+        "enabled": false,
+        "scope": "local",
+        "method": "archive",
+        "mode": "incremental",
+        "consistency": {
+            "policy": "prefer_snapshot"
+        },
+        "schedule": {
+            "kind": "manual"
+        },
+        "resources": {
+            "class": "balanced"
+        },
+        "retention": {
+            "enabled": false,
+            "protect_last": true
+        },
+        "verification": {
+            "publication": "metadata_verified",
+            "restore": "data_verified"
+        },
+        "retry": {
+            "initial_seconds": 5,
+            "max_seconds": 900,
+            "max_attempts": 8,
+            "max_age_seconds": 86400
+        },
+        "overlap": "forbid",
+        "sources": [
+            {
+                "source_id": "documents",
+                "endpoint": "documents_source",
+                "selector": "."
+            }
+        ],
+        "destinations": [
+            {
+                "destination_id": "remote_archive",
+                "endpoint": "object_archive",
+                "repository_id": "repo_1"
+            }
+        ]
+    },
+    "source_bindings": [
+        {
+            "source_id": "documents",
+            "endpoint_identity": "source_1",
+            "endpoint_revision": "1"
+        }
+    ],
+    "secret_refs": [
+        "local_archive_key"
+    ],
+    "security_policy_revision": "1",
+    "verification": "metadata_verified"
+}
