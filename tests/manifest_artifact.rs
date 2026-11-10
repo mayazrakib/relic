@@ -169,3 +169,58 @@ fn rejects_noncanonical_and_oversized_frames_even_when_authenticated() {
         .is_err()
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn sorter_failure_never_finishes_artifact_authentication() {
+    use relic::encrypted_manifest_sort::{EncryptedManifestSort, SortLimits};
+    use relic::manifest_artifact::seal_sorted_manifest;
+
+    let directory = private_directory();
+    let key = Zeroizing::new([7; 32]);
+    let guard = StageGuard::default();
+    let mut sorter = EncryptedManifestSort::create(
+        directory.path(),
+        &key,
+        SortLimits {
+            max_entries: 4,
+            max_frame_bytes: 256 * 1024,
+            max_chunk_bytes: 512 * 1024,
+            max_chunk_entries: 1,
+            max_runs: 4,
+            max_fan_in: 4,
+            max_cipher_bytes: 4 * 1024 * 1024,
+            max_memory_bytes: 8 * 1024 * 1024,
+        },
+        &guard,
+    )
+    .unwrap();
+    let entry: ManifestEntry =
+        serde_json::from_str(include_str!("../fixtures/contracts/manifest_entry.json")).unwrap();
+    sorter.add_entry(&entry).unwrap();
+    sorter.add_entry(&entry).unwrap();
+    let mut ciphertext = Vec::new();
+    assert!(
+        seal_sorted_manifest(
+            &mut sorter,
+            2,
+            &binding(),
+            &mut ciphertext,
+            &key,
+            limits(),
+            &guard
+        )
+        .is_err()
+    );
+    assert!(
+        verify_sealed_manifest(
+            &mut &ciphertext[..],
+            &binding(),
+            &key,
+            limits(),
+            &guard,
+            "sha256:unused"
+        )
+        .is_err()
+    );
+}

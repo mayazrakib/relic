@@ -2,6 +2,9 @@ use std::fmt;
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 use std::path::Path;
 
+use crate::encrypted_manifest_sort::{EncryptedManifestSort, SortError};
+use crate::local_endpoint::LocalEndpoint;
+use crate::manifest::ManifestEntry;
 use crate::manifest_spool::{ManifestSpool, SpoolError};
 use crate::resources::{ResourceError, StageGuard};
 
@@ -24,6 +27,8 @@ pub enum ScanError {
     MOUNT_BOUNDARY,
     IO(std::io::Error),
     SPOOL(SpoolError),
+    SORT(SortError),
+    ENDPOINT,
     RESOURCE(ResourceError),
     UNSUPPORTED_PLATFORM,
 }
@@ -38,6 +43,8 @@ impl fmt::Display for ScanError {
             Self::MOUNT_BOUNDARY => "source mount traversal is disabled",
             Self::IO(_) => "source I/O failed",
             Self::SPOOL(_) => "manifest spool failed",
+            Self::SORT(_) => "encrypted manifest sort failed",
+            Self::ENDPOINT => "pinned endpoint changed",
             Self::RESOURCE(_) => "source scan canceled or resource limit reached",
             Self::UNSUPPORTED_PLATFORM => "source scanner is unavailable on this platform",
         })
@@ -64,6 +71,22 @@ impl From<ResourceError> for ScanError {
     }
 }
 
+pub trait ManifestSink {
+    fn append_entry(&mut self, entry: &ManifestEntry) -> Result<(), ScanError>;
+}
+
+impl ManifestSink for ManifestSpool {
+    fn append_entry(&mut self, entry: &ManifestEntry) -> Result<(), ScanError> {
+        self.add_entry(entry).map_err(ScanError::SPOOL)
+    }
+}
+
+impl ManifestSink for EncryptedManifestSort {
+    fn append_entry(&mut self, entry: &ManifestEntry) -> Result<(), ScanError> {
+        self.add_entry(entry).map_err(ScanError::SORT)
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix {
     use std::ffi::{CStr, CString};
@@ -78,7 +101,7 @@ mod unix {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use sha2::{Digest, Sha256};
 
-    use super::{ManifestSpool, ScanError, ScanLimits, StageGuard};
+    use super::{LocalEndpoint, ManifestSink, ManifestSpool, ScanError, ScanLimits, StageGuard};
     use crate::manifest::ManifestEntry;
 
     struct Directory(*mut libc::DIR);
@@ -247,9 +270,9 @@ mod unix {
         }
     }
 
-    struct Scanner<'a> {
+    struct Scanner<'a, S: ManifestSink> {
         source_id: &'a str,
-        spool: &'a mut ManifestSpool,
+        spool: &'a mut S,
         limits: ScanLimits,
         guard: &'a StageGuard,
         entries: u64,
@@ -258,7 +281,7 @@ mod unix {
         path: Vec<String>,
     }
 
-    impl Scanner<'_> {
+    impl<S: ManifestSink> Scanner<'_, S> {
         fn add_entry(
             &mut self,
             kind: &str,
@@ -272,7 +295,7 @@ mod unix {
             if self.entries > self.limits.max_entries {
                 return Err(ScanError::LIMIT_EXCEEDED);
             }
-            self.spool.add_entry(&ManifestEntry {
+            self.spool.append_entry(&ManifestEntry {
                 source_id: self.source_id.to_owned(),
                 path_encoding: "unix_bytes".to_owned(),
                 path: self.path.clone(),
@@ -375,6 +398,49 @@ mod unix {
         }
     }
 
+    pub fn scan_source_pinned<S: ManifestSink>(
+        endpoint: &LocalEndpoint,
+        source_id: &str,
+        mut sink: S,
+        limits: ScanLimits,
+        guard: &StageGuard,
+    ) -> Result<(S, u64), ScanError> {
+        if limits.max_depth > 128
+            || limits.max_open_files < limits.max_depth.saturating_add(3)
+            || limits.max_entries == 0
+            || limits.max_file_bytes == 0
+            || limits.max_total_bytes == 0
+        {
+            return Err(ScanError::INVALID_LIMITS);
+        }
+        guard.check()?;
+        endpoint.revalidate().map_err(|_| ScanError::ENDPOINT)?;
+        let file = open_at(endpoint.directory().as_raw_fd(), c".", true)?;
+        let before = get_stat(file.as_raw_fd())?;
+        let pinned = get_stat(endpoint.directory().as_raw_fd())?;
+        if !matches_stat(&before, &pinned) {
+            return Err(ScanError::CHANGED);
+        }
+        let mut scanner = Scanner {
+            source_id,
+            spool: &mut sink,
+            limits,
+            guard,
+            entries: 0,
+            total_bytes: 0,
+            root_device: before.st_dev,
+            path: Vec::new(),
+        };
+        scanner.scan_directory(file, &before, 0)?;
+        let count = scanner.entries;
+        if !matches_stat(&before, &get_stat(endpoint.directory().as_raw_fd())?) {
+            return Err(ScanError::CHANGED);
+        }
+        endpoint.revalidate().map_err(|_| ScanError::ENDPOINT)?;
+        guard.check()?;
+        Ok((sink, count))
+    }
+
     pub fn scan_source(
         root: &Path,
         source_id: &str,
@@ -470,7 +536,7 @@ mod unix {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-pub use unix::scan_source;
+pub use unix::{scan_source, scan_source_pinned};
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn scan_source(
@@ -480,5 +546,16 @@ pub fn scan_source(
     _limits: ScanLimits,
     _guard: &StageGuard,
 ) -> Result<ManifestSpool, ScanError> {
+    Err(ScanError::UNSUPPORTED_PLATFORM)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub fn scan_source_pinned<S: ManifestSink>(
+    _endpoint: &LocalEndpoint,
+    _source_id: &str,
+    _sink: S,
+    _limits: ScanLimits,
+    _guard: &StageGuard,
+) -> Result<(S, u64), ScanError> {
     Err(ScanError::UNSUPPORTED_PLATFORM)
 }

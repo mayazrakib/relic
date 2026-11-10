@@ -19,3 +19,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 5. Capture Milestone Native Results
 
 [Run 42803038693](https://github.com/mayazrakib/relic/actions/runs/42803038693) passed on Linux and macOS for `4de2f03`, verifying the scanner fixture correction. Windows failed to compile `tests/state.rs`: a `cfg(unix)` attribute attached to the shared capture helper instead of the Unix symlink test. The corrected placement keeps the helper available on Windows and excludes only the Unix test. Fresh native verification of that correction remains required.
+
+## 6. Reduced-Memory Milestone
+
+[Run 42806104925](https://github.com/mayazrakib/relic/actions/runs/42806104925) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `7a2e98d`, including the Windows test correction. This verifies that milestone's native builds and selected component tests. Later pinned-capture integration changes require their own native run, and the external executable recovery tests remain outside default CI.

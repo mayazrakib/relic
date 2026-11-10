@@ -132,3 +132,34 @@ fn rejects_symlinks_limits_and_cancellation_without_returning_spool() {
         }
     }
 }
+
+#[test]
+fn pinned_scan_rejects_replaced_endpoint_before_enumeration() {
+    use relic::local_endpoint::{FileIdentity, LocalEndpoint};
+    use relic::source_scan::scan_source_pinned;
+    use std::os::unix::fs::MetadataExt;
+
+    let directory = private_directory();
+    let root = fs::canonicalize(directory.path()).unwrap();
+    let source = root.join("source");
+    fs::create_dir(&source).unwrap();
+    let metadata = fs::metadata(&source).unwrap();
+    let endpoint = LocalEndpoint::resolve(
+        &source,
+        FileIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        },
+    )
+    .unwrap();
+    fs::rename(&source, root.join("old")).unwrap();
+    fs::create_dir(&source).unwrap();
+    let result = scan_source_pinned(
+        &endpoint,
+        "source_1",
+        make_spool(&root),
+        get_limits(),
+        &StageGuard::default(),
+    );
+    assert!(matches!(result, Err(ScanError::ENDPOINT)));
+}

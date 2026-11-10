@@ -22,6 +22,7 @@ pub enum ArtifactError {
     AUTHENTICATION,
     IO(io::Error),
     SPOOL(crate::manifest_spool::SpoolError),
+    SORT(crate::encrypted_manifest_sort::SortError),
     ENCRYPTED(encrypted_spool::SpoolError),
 }
 
@@ -71,6 +72,87 @@ fn write_frame<W: Write, T: Serialize>(writer: &mut W, value: &T) -> Result<(), 
     writer.write_all(&frame)
 }
 
+pub struct ManifestArtifactWriter<W: Write> {
+    writer: EncryptedSpoolWriter<W>,
+    validator: ManifestValidator,
+    entry_count: u64,
+    is_failed: bool,
+    guard: StageGuard,
+}
+
+impl<W: Write> ManifestArtifactWriter<W> {
+    pub fn new(
+        binding: &CaptureBinding,
+        entry_count: u64,
+        destination: W,
+        key: &Zeroizing<[u8; 32]>,
+        limits: encrypted_spool::SpoolLimits,
+        guard: &StageGuard,
+    ) -> Result<Self, ArtifactError> {
+        let context = context(binding)?;
+        let mut writer = EncryptedSpoolWriter::new(destination, key, &context, limits, guard)
+            .map_err(ArtifactError::ENCRYPTED)?;
+        let header = ManifestHeader {
+            schema_version: 1,
+            capture_id: binding.capture_id.clone(),
+            entry_count: entry_count.to_string(),
+        };
+        let validator = ManifestValidator::new(&header).map_err(|_| ArtifactError::INVALID)?;
+        writer.write_all(DOMAIN).map_err(ArtifactError::IO)?;
+        write_frame(&mut writer, &header).map_err(ArtifactError::IO)?;
+        Ok(Self {
+            writer,
+            validator,
+            entry_count,
+            is_failed: false,
+            guard: guard.clone(),
+        })
+    }
+
+    pub fn add_entry(&mut self, entry: &ManifestEntry) -> Result<(), ArtifactError> {
+        if self.is_failed {
+            return Err(ArtifactError::INVALID);
+        }
+
+        if self.guard.check().is_err() {
+            self.is_failed = true;
+
+            return Err(ArtifactError::ENCRYPTED(
+                encrypted_spool::SpoolError::RESOURCE,
+            ));
+        }
+
+        let result = self
+            .validator
+            .add_entry(entry)
+            .map_err(|_| ArtifactError::INVALID)
+            .and_then(|()| write_frame(&mut self.writer, entry).map_err(ArtifactError::IO));
+        if result.is_err() {
+            self.is_failed = true;
+        }
+        result
+    }
+
+    pub fn finish(self) -> Result<ManifestArtifact, ArtifactError> {
+        self.guard
+            .check()
+            .map_err(|_| ArtifactError::ENCRYPTED(encrypted_spool::SpoolError::RESOURCE))?;
+
+        if self.is_failed {
+            return Err(ArtifactError::INVALID);
+        }
+        let digest = self
+            .validator
+            .finish()
+            .map_err(|_| ArtifactError::INVALID)?;
+        self.writer.finish().map_err(ArtifactError::ENCRYPTED)?;
+        Ok(ManifestArtifact {
+            digest,
+            entry_count: self.entry_count,
+        })
+    }
+}
+
 pub fn seal_manifest<W: Write>(
     spool: &ManifestSpool,
     binding: &CaptureBinding,
@@ -79,31 +161,50 @@ pub fn seal_manifest<W: Write>(
     limits: encrypted_spool::SpoolLimits,
     guard: &StageGuard,
 ) -> Result<ManifestArtifact, ArtifactError> {
-    let context = context(binding)?;
-    let mut writer = EncryptedSpoolWriter::new(destination, key, &context, limits, guard)
-        .map_err(ArtifactError::ENCRYPTED)?;
-    let header = ManifestHeader {
-        schema_version: 1,
-        capture_id: binding.capture_id.clone(),
-        entry_count: spool.get_entry_count().to_string(),
-    };
-    let mut validator = ManifestValidator::new(&header).map_err(|_| ArtifactError::INVALID)?;
-    writer.write_all(DOMAIN).map_err(ArtifactError::IO)?;
-    write_frame(&mut writer, &header).map_err(ArtifactError::IO)?;
+    let mut writer = ManifestArtifactWriter::new(
+        binding,
+        spool.get_entry_count(),
+        destination,
+        key,
+        limits,
+        guard,
+    )?;
     spool
         .visit_sorted_with_guard(guard, |entry| {
-            validator
-                .add_entry(entry)
-                .map_err(crate::manifest_spool::SpoolError::MANIFEST)?;
-            write_frame(&mut writer, entry).map_err(crate::manifest_spool::SpoolError::IO)
+            writer.add_entry(entry).map_err(|_| {
+                crate::manifest_spool::SpoolError::MANIFEST(
+                    crate::manifest::ManifestError::INVALID("artifact write failed"),
+                )
+            })
         })
         .map_err(ArtifactError::SPOOL)?;
-    let digest = validator.finish().map_err(|_| ArtifactError::INVALID)?;
-    writer.finish().map_err(ArtifactError::ENCRYPTED)?;
-    Ok(ManifestArtifact {
-        digest,
-        entry_count: spool.get_entry_count(),
-    })
+    writer.finish()
+}
+
+pub fn seal_sorted_manifest<W: Write>(
+    sorter: &mut crate::encrypted_manifest_sort::EncryptedManifestSort,
+    entry_count: u64,
+    binding: &CaptureBinding,
+    destination: W,
+    key: &Zeroizing<[u8; 32]>,
+    limits: encrypted_spool::SpoolLimits,
+    guard: &StageGuard,
+) -> Result<ManifestArtifact, ArtifactError> {
+    let mut writer =
+        ManifestArtifactWriter::new(binding, entry_count, destination, key, limits, guard)?;
+    let digest = sorter
+        .visit_sorted(&binding.capture_id, |entry| {
+            writer
+                .add_entry(entry)
+                .map_err(|_| crate::encrypted_manifest_sort::SortError::INVALID)
+        })
+        .map_err(ArtifactError::SORT)?;
+    guard.check().map_err(|_| ArtifactError::INVALID)?;
+    let artifact = writer.finish()?;
+    if artifact.digest != digest {
+        return Err(ArtifactError::INVALID);
+    }
+    Ok(artifact)
 }
 
 struct FrameParser<'a> {
