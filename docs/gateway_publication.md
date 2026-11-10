@@ -1,0 +1,53 @@
+## 1. Scope
+
+Schema nine introduces the trusted local publication journal for the future destination gateway. It records resource authority, publication admissions, ordered physical executions, and correlated receipts. It does not grant a process write authority or prove that a destination has been mutated safely. Sole-credential process isolation, actual repository ownership, source and destination verification, accepted-effect draining, and daemon dispatch still need physical integration. Enabled archive jobs remain gated.
+
+## 2. Resource Authority
+
+A resource binds its local authority identity, endpoint identity, physical storage identity, and opaque repository-key reference. Physical storage identities are unique across resource records. A prepared resource learns one immutable native repository identity before becoming ready. Positive receiver epochs and fencing generations are stored as canonical decimal strings and compared as integers.
+
+Fence installation requires a strictly higher generation and a nondecreasing epoch. An unresolved execution prevents advancement. A blocked resource can become ready through an explicit higher-fence installation only when its repository identity is known and no accepted effect remains unresolved. The caller still needs actual old-writer exclusion before making that transition. A journal counter or an exclusive repository lock alone does not establish destination fencing.
+
+Filesystem ancestor overlap, alternate mutation prefixes, quorum authorization, maintenance domains, and receiver replacement require controller and backend evidence beyond the unique exact storage identity currently stored here.
+
+## 3. Immutable Publication Admissions
+
+An admission binds one resource and admission identity to the existing logical publication key and payload hash, a verified private native run and snapshot, the frozen capture and manifest, and an executor owner. It persists the originally accepted epoch and fence, a fixed publication request type, and an accepted decision. A resource/key replay returns the same admission binding. A different admission identity, payload, owner, source, or effective policy conflicts.
+
+The admission includes the planner's effective-policy preimage. Its exact six-field structure, relevant job and destination identities, native repository binding, method, and verification level are checked. The canonical preimage is limited to 64 KiB and hashed in the existing effective-policy domain; it must match the immutable publication policy digest. Receipt requirements are derived from that bound policy instead of an independently supplied weaker verification flag. Replication admissions require full-data verification.
+
+Physical discovery, endpoint and grant revisions, secret-provider authority, and the validity of the planner's observations remain caller obligations. These trusted Rust APIs are not an authenticated public request surface.
+
+## 4. Execution History and Receipts
+
+Each admission can append at most three ordered executions. An execution records its resource, current epoch and fence, and effect state before protected work. The database permits at most one active, unknown, or published-unverified execution for a resource. Another mutation cannot begin while such an execution exists.
+
+| State | Meaning |
+|---|---|
+| `active` | An accepted physical execution can have effects |
+| `unknown` | Accepted effects require reconciliation; absence of a response does not prove absence of publication |
+| `proven_unpublished` | A trusted caller established the no-publication condition; a bounded execution retry can append to the same admission |
+| `published_unverified` | A native result is known and immutable, but full required verification and receipt completion remain pending |
+| `verified` | The correlated publication receipt and execution completion were committed atomically |
+
+The trusted caller supplies physical proof before reporting a native result or proven absence. This journal cannot discover that proof by itself. Repeated transition calls can return a conflict; a caller can read the recorded state and continue reconciliation without recreating an effect. Receipt replay returns the original receipt. A receipt cannot change the execution's native result or weaken the policy's verification requirement.
+
+Receipt completion checks the logical key, payload hash, capture, manifest, source view, consistency, destination revision, policy digest, resource, original execution epoch and fence, admission identity, native repository, and native result. Publication and execution verification update together. Legacy publication state and receipt APIs reject gateway-bound keys, including an atomic SQL exclusion condition that closes a concurrent admission race.
+
+## 5. Strict Native Snapshot Discovery
+
+Linux gateway discovery uses a bounded physical census of the pinned native `snapshots` directory and authenticates each snapshot through its exact full native ID. It rejects invalid names, links, special files, unreadable entries, excessive counts, zero or excessive ciphertext, and changed file/directory generations. A second census checks that the snapshot set and identities stayed unchanged across decoding. The caller owns serialization and exclusion of external writers.
+
+Limits cover at most 1,024 snapshot entries, a caller-selected aggregate ciphertext budget up to 16 MiB, and cumulative serialized snapshot metadata up to 8 MiB. The current private archive worker uses a 1 MiB aggregate ciphertext allowance. Metadata counting writes into a bounded sink and does not allocate a second metadata buffer. These limits bound retained logical content, not transient native decoding or allocator overhead; the physical worker memory cap remains necessary. Large-index and compression-expansion qualification are still pending.
+
+The pinned SDK has distinct discovery paths. Its direct full listing propagates snapshot decryption failures. Time-based selectors can log and skip those failures, while the local backend's filename scan can omit malformed entries and filesystem-walk errors. The regression explicitly distinguishes these behaviors. Gateway reconciliation uses neither a time-based selector nor a best-effort negative scan to establish that a publication is absent.
+
+## 6. Acceptance and Remaining Work
+
+The [evidence record](evidence/gateway_journal.json) records actual validation and source fingerprints. Fixtures cover changed admission bindings and policy preimages, concurrent admission and execution, stale fences, unresolved effects, bounded append history, blocked-resource recovery, weak replication policy, receipt mismatches, and schema migration. Native archive fixtures exercise authenticated discovery, corrupt snapshots, invalid physical names, exact content verification, and independent restoration.
+
+The next required vertical integration is one credential-holding local gateway process with a durably owned resource lock, bounded control protocol, source pin, complete source verification before writes, tagged native copy, fresh destination verification, repository synchronization, and uncertain-worker lease retention. A restart needs actual writer quiescence and strict accepted-effect reconciliation. Safe negative reconciliation and retry must preserve the original admission and execution history. Shared failover remains unavailable without backend-specific exclusion proof.
+
+File-archive incremental qualification also needs stable native chunking across private stages and their final repository. The pinned SDK's ordinary initializer selects a new Rabin polynomial; native copy preserves existing blob boundaries. The inference is that unrelated fresh staging configurations can reduce cross-occurrence deduplication. A future file-archive stage should use the final repository's authenticated chunker parameters with its own distinct native repository identity, and qualify incompressible unchanged and sparsely changed data. Replication of already committed snapshots has different provenance and must preserve its source identities. This source inspection is not a measured deduplication result.
+
+No final destination publication, retention, pruning, repair, S3 gateway, quorum claim, maintenance admission, native receipt durability, or full-system acceptance is established by this journal checkpoint alone.

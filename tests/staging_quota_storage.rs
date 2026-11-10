@@ -8,9 +8,10 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 fn create_endpoint(path: &std::path::Path) -> LocalEndpoint {
     fs::create_dir(path).unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
-    let metadata = fs::metadata(path).unwrap();
+    let canonical = fs::canonicalize(path).unwrap();
+    let metadata = fs::metadata(&canonical).unwrap();
     LocalEndpoint::resolve(
-        path,
+        &canonical,
         FileIdentity {
             device: metadata.dev(),
             inode: metadata.ino(),

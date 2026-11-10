@@ -14,7 +14,7 @@ use crate::staging_quota::{
 };
 
 const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
-const CURRENT_SCHEMA_VERSION: u32 = 8;
+const CURRENT_SCHEMA_VERSION: u32 = 9;
 
 #[derive(Debug)]
 pub enum StateError {
@@ -312,7 +312,7 @@ type PayloadCaptureRow = (
 );
 
 pub struct StateStore {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl StateStore {
@@ -572,6 +572,10 @@ impl StateStore {
             transaction.execute_batch(include_str!(
                 "../database/migrations/00008_staging_quota.sql"
             ))?;
+        }
+
+        if version <= 8 {
+            transaction.execute_batch(include_str!("../database/migrations/00009_gateway.sql"))?;
         }
 
         transaction.commit()?;
@@ -2304,7 +2308,16 @@ impl StateStore {
             return Err(StateError::EffectConflict);
         }
 
-        let changed = self.connection.execute("UPDATE publication_intents SET effect_state = ?1, native_result_id = ?2, system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE commit_key = ?3 AND effect_state = ?4", params![next, native_result_id, serde_jcs::to_string(key)?, expected])?;
+        let gateway_bound: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM gateway_admissions WHERE commit_key = ?1)",
+            [serde_jcs::to_string(key)?],
+            |row| row.get(0),
+        )?;
+        if gateway_bound {
+            return Err(StateError::EffectConflict);
+        }
+
+        let changed = self.connection.execute("UPDATE publication_intents SET effect_state = ?1, native_result_id = ?2, system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE commit_key = ?3 AND effect_state = ?4 AND NOT EXISTS (SELECT 1 FROM gateway_admissions WHERE commit_key = ?3)", params![next, native_result_id, serde_jcs::to_string(key)?, expected])?;
 
         if changed != 1 {
             return Err(StateError::EffectConflict);
@@ -2319,6 +2332,14 @@ impl StateStore {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let gateway_bound: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM gateway_admissions WHERE commit_key = ?1)",
+            [&key],
+            |row| row.get(0),
+        )?;
+        if gateway_bound {
+            return Err(StateError::EffectConflict);
+        }
         let previous: Option<PublicationRow> = transaction.query_row(
             "SELECT payload_hash, binding, effect_state, native_result_id, receipt FROM publication_intents WHERE commit_key = ?1",
             [&key],

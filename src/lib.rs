@@ -5,6 +5,8 @@ pub mod archive_backend;
 pub mod archive_disk;
 #[cfg(feature = "embedded-archive")]
 pub mod archive_manifest;
+#[cfg(all(feature = "embedded-archive", target_os = "linux"))]
+pub mod archive_snapshot;
 #[cfg(feature = "embedded-archive")]
 pub mod archive_source;
 #[cfg(all(feature = "embedded-archive", unix))]
@@ -17,6 +19,7 @@ pub mod domain;
 pub mod embedded_archive;
 pub mod encrypted_manifest_sort;
 pub mod encrypted_spool;
+pub mod gateway_state;
 pub mod identity;
 pub mod local_endpoint;
 pub mod manifest;

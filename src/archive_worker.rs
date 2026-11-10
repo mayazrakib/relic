@@ -741,9 +741,17 @@ mod linux {
             .map_err(|_| WorkerProtocolError::ENGINE)?
             .to_indexed()
             .map_err(|_| WorkerProtocolError::ENGINE)?;
-        let mut snapshots = repository
-            .get_all_snapshots()
-            .map_err(|_| WorkerProtocolError::ENGINE)?;
+        let mut snapshots = crate::archive_snapshot::get_snapshots_checked(
+            &repository,
+            &repo_endpoint,
+            crate::archive_snapshot::SnapshotLimits {
+                max_snapshots: 1024,
+                max_ciphertext_bytes: 1024 * 1024,
+                max_metadata_bytes: 8 * 1024 * 1024,
+            },
+            &guard,
+        )
+        .map_err(|_| WorkerProtocolError::VERIFICATION)?;
         if snapshots.len() != 1 {
             return Err(WorkerProtocolError::VERIFICATION);
         }

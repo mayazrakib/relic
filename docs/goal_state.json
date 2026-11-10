@@ -328,15 +328,16 @@
         "docs/evidence/restore_store.json",
         "docs/evidence/multipass_sort.json",
         "docs/evidence/native_run_store.json",
-        "docs/evidence/staging_quota.json"
+        "docs/evidence/staging_quota.json",
+        "docs/evidence/gateway_journal.json"
     ],
     "blockers": [],
-    "next_action": "Implement full controller startup ownership/exclusion recovery and sole-credential serialized destination publication gateway with native reconciliation and durable receipts; then owned cleanup and durable quota credits, remaining storage/platform profiles, and all later mandatory phases.",
+    "next_action": "Review and compile unwired gateway_worker.rs; durably bind gateway owner/scratch identities and initialization attempts; integrate bounded sole-credential parent controller and actual tagged native copy/full destination verification/receipt/reconciliation; qualify stable chunking, then all remaining mandatory phases.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "b2e4334fd5b260d4c3c956e96b4ee8486d44c1b812fe80bc4a057ec32cb72be8",
+    "source_fingerprint": "3a55fa6d20ce7004a85727b1c1677fd8a1dbd7d72f3f0763b4bb631d6449db79",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -833,30 +834,53 @@
                 "docs/evidence/staging_quota.json"
             ],
             "limits": "Logical ciphertext only, not allocated filesystem blocks, metadata/inodes, standalone temporary sorter space or plaintext restore trees; One canonical node state database and external-writer exclusion required; multiple independent databases are not a shared quota authority; Registered storage is not rescanned for unknown files introduced later; full controller startup inventory and delegated-scope quiescence remain pending; Legacy inventory APIs trust physical proof supplied by internal caller; native repository bytes and unknown files require actual caller inventory; No quota release or recursive cleanup; safe durable credits and administrator recovery still pending; Unix device/inode identity is not removable-volume identity across remount/device reuse; Private stages only; production enabled jobs, fenced destination publication/receipts, S3 and all other mandatory full-system gates remain incomplete"
+        },
+        {
+            "name": "Standalone publication journal and strict snapshot discovery",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "src/gateway_state.rs",
+                "src/archive_snapshot.rs",
+                "database/migrations/00009_gateway.sql",
+                "tests/gateway_state.rs",
+                "tests/archive_disk.rs",
+                "docs/evidence/gateway_journal.json"
+            ],
+            "limits": "Journal APIs trust actual physical exclusion, native verification and no-effect proof supplied by internal caller; not exposed as public authorization endpoint; No physical gateway controller, complete final-publication executor, sole-credential boundary or destination receipt durability established by this checkpoint; Exact physical storage identity uniqueness is not complete ancestor/prefix conflict-domain resolution; quorum, maintenance and receiver-failover protections remain pending; Unwired src/gateway_worker.rs is next-step implementation work and is deliberately excluded from this tested source set and milestone commit; Stable authenticated chunker parameters across fresh file-archive stages remain a deduplication qualification gate; SDKinit random polynomial andcopy preservesblobboundaries; Full controller startup, persistent physical inventory, cleanup/credits, selected native worker implementations, S3 and all remaining full-system acceptance gates remain incomplete"
+        },
+        {
+            "name": "Physical local gateway worker and durable controller",
+            "phase": 3,
+            "status": "in_progress",
+            "evidence": [
+                "src/gateway_worker.rs"
+            ],
+            "limits": "Source-only worker implementation is unwired and untested; physical owner/scratch identities still caller evidence until durably bound by controller. No final destination publication enabled."
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented schema8 persistent logical ciphertext quota across owned manifest/payload/source/native stores, same-volume aliases, immutable replay with currentfree checks, legacyinventory gate, pinned empty firstroot check, durable closednodegate after orphan detection, and source reservation beforeper-stage lock.203fulltests pass before final inventory-gate strengthening andscratchfixture;34affected focusedtests passafter finalchanges. Fullpeak719.8M;focused492.4M;Clippy320.9M;defaultcheck241.9M, allzero swap. Prior1bf9a0c nativeCI42866870779 passedall3targets. Fullgoalactive; quota is logicalciphertextonly, no durablecredits/fullcontrollerinventory/fencedpublicationyet."
+        "result": "Implemented schema9 local gateway journal with hash-bound effectivepolicy, immutable admission epoch/fence, ordered max3executions, concurrent uniqueness, correlated atomicreceipts and blockedresource recovery. Added strict physical native snapshot census and explicitfullID reading withaggregate byte/metadata limits. All214 tests pass zeroignored; fullpeak770.6M/no swap. Clippy331.4M anddefaultcheck250.8M pass. Precedingf5a nativeCI Linux/Windows pass, macOS quotafixturefailedbeforeexecution dueancestor alias; canonicalizedfixture, freshnativeverificationpending. Nextphysicalgateway_worker source isunwiredWIP, notqualifiedpublication. Fullgoalactive."
     },
     "remote_checkpoint": {
-        "commit": "1bf9a0ce12b5d83fc8a7d5a6bde0695f20727d19",
+        "commit": "f5a844167109e7ee86cc16e60921c0e598ef069a",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42866870779,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42866870779",
-        "status": "completed_successfully",
+        "native_ci_run_id": 42870030771,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42870030771",
+        "status": "completed_with_macos_fixture_failure",
         "push_transport": "existing authorized SSH credential",
         "results": {
             "linux-x86_64": "success",
             "windows-x86_64": "success",
-            "macos-arm64": "success"
+            "macos-arm64": "failure: strict fixture endpoint resolution saw macOS temporary ancestor alias"
         }
     },
     "prior_native_checkpoint": {
-        "commit": "9a26dcce6b3d510caf070be27fe0bb8225df4da4",
+        "commit": "1bf9a0ce12b5d83fc8a7d5a6bde0695f20727d19",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42858335229,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42858335229",
+        "native_ci_run_id": 42866870779,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42866870779",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -956,6 +980,19 @@
                 "windows-x86_64": "success",
                 "macos-arm64": "success"
             }
+        },
+        {
+            "commit": "9a26dcce6b3d510caf070be27fe0bb8225df4da4",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42858335229,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42858335229",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
         }
     ],
     "failure_controls": {
@@ -1029,6 +1066,15 @@
             "status": "resolved",
             "corrective_commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
             "verification_run": 42842979485
+        },
+        "macos_quota_fixture_ancestor_alias": {
+            "initial_run": 42870030771,
+            "initial_commit": "f5a844167109e7ee86cc16e60921c0e598ef069a",
+            "observed_error": "tests/staging_quota_storage.rs:19 IDENTITY_CHANGED before quota execution; temporary path contains macOS /var ancestor alias",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Canonicalize only the owned test root before strict endpoint resolution; preserve endpoint identity validation",
+            "status": "awaiting_fresh_native_verification"
         }
     },
     "preserved_worktree_changes": [

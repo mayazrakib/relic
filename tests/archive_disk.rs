@@ -781,6 +781,56 @@ fn native_archive_consumes_owned_files_and_matches_frozen_manifest() {
     .unwrap();
     assert_eq!(report.file_count, 3);
     assert_eq!(report.payload_bytes, fixture.data_bytes + 14);
+    #[cfg(target_os = "linux")]
+    {
+        use relic::archive_snapshot::{SnapshotError, SnapshotLimits, get_snapshots_checked};
+        let endpoint = get_endpoint(&repository_path);
+        let limits = SnapshotLimits {
+            max_snapshots: 4,
+            max_ciphertext_bytes: 1024 * 1024,
+            max_metadata_bytes: 8 * 1024 * 1024,
+        };
+        let listed = get_snapshots_checked(&repository, &endpoint, limits, &guard).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(
+            listed[0].id.to_hex().as_str(),
+            snapshot.id.to_hex().as_str()
+        );
+        let corrupt = repository_path.join("snapshots").join("f".repeat(64));
+        assert!(!corrupt.exists());
+        fs::write(&corrupt, b"invalid encrypted snapshot").unwrap();
+        assert!(repository.get_all_snapshots().is_err());
+        // The SDK's time-based selector logs and skips unreadable snapshots.
+        assert_eq!(
+            repository
+                .get_snapshot_from_str("latest", |_| true)
+                .unwrap()
+                .id
+                .to_hex()
+                .as_str(),
+            snapshot.id.to_hex().as_str()
+        );
+        assert!(matches!(
+            get_snapshots_checked(&repository, &endpoint, limits, &guard),
+            Err(SnapshotError::ENGINE)
+        ));
+        fs::remove_file(&corrupt).unwrap();
+        let invalid_name = repository_path.join("snapshots/unexpected");
+        fs::write(&invalid_name, b"unregistered").unwrap();
+        // The SDK backend listing omits names outside its native-ID grammar.
+        assert_eq!(repository.get_all_snapshots().unwrap().len(), 1);
+        assert!(matches!(
+            get_snapshots_checked(&repository, &endpoint, limits, &guard),
+            Err(SnapshotError::STORAGE)
+        ));
+        fs::remove_file(&invalid_name).unwrap();
+        assert_eq!(
+            get_snapshots_checked(&repository, &endpoint, limits, &guard)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]
