@@ -773,3 +773,117 @@ fn native_archive_consumes_owned_files_and_matches_frozen_manifest() {
     assert_eq!(report.file_count, 3);
     assert_eq!(report.payload_bytes, fixture.data_bytes + 14);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires delegated Linux cgroup guard and verified independent restic"]
+fn contained_worker_verifies_native_snapshot_and_independent_recovery() {
+    use relic::archive::Archive;
+    use relic::archive_worker::{
+        ArchiveWorkerReport, ArchiveWorkerRequest, WorkerDirectoryIdentity,
+    };
+    use relic::worker_runtime::{WorkerLimits, execute_worker};
+    use std::time::Duration;
+
+    let mut fixture = Fixture::create(131_089);
+    let guard = StageGuard::default();
+    let source = fixture.create_source("stage_1", &guard).unwrap();
+    drop(source);
+    fs::remove_file(fixture.root.join("artifacts/payload_payload_1.sealed")).unwrap();
+    let repository = fixture.root.join("worker_repository");
+    create_private_directory(&repository);
+    let metadata = fs::metadata(&repository).unwrap();
+    let limits = WorkerLimits {
+        memory_max_bytes: 192 * 1024 * 1024,
+        memory_high_bytes: 144 * 1024 * 1024,
+        max_tasks: 64,
+        max_open_files: 64,
+        max_runtime: Duration::from_secs(120),
+        max_output_bytes: 16 * 1024 + 4,
+    };
+    let pool = ResourcePool::new(ResourceClass::BALANCED, 2);
+    let job = pool.admit_job("job_1", &guard).unwrap();
+    let _reservation = job
+        .reserve_stage(
+            None,
+            Demand {
+                data_bytes: limits.memory_max_bytes,
+                spool_bytes: 64 * 1024 * 1024,
+                open_files: 64,
+                cpu_workers: 1,
+                streams: 4,
+                ..Demand::default()
+            },
+            &guard,
+        )
+        .unwrap();
+    let request = ArchiveWorkerRequest {
+        state_dir: fixture.root.join("state"),
+        archive_dir: fixture.root.join("disk"),
+        stage_binding: fixture.get_binding("stage_1"),
+        archive_key: *fixture.key,
+        source_limits: get_disk_limits(),
+        repository_dir: repository.clone(),
+        repository_identity: WorkerDirectoryIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        },
+        repository_password: "test-only-password".into(),
+        memory_max_bytes: limits.memory_max_bytes,
+        timeout_seconds: 100,
+    };
+    let body = Zeroizing::new(serde_json::to_vec(&request).unwrap());
+    let mut input = Zeroizing::new((body.len() as u32).to_be_bytes().to_vec());
+    input.extend_from_slice(&body);
+    let output = execute_worker(
+        Path::new(env!("CARGO_BIN_EXE_relic-worker")),
+        &input,
+        &[fixture.root.join("state"), fixture.root.join("disk")],
+        &[fixture.root.join("worker_repository")],
+        limits,
+        &guard,
+    )
+    .unwrap();
+    assert!(output.memory_peak_bytes > 0 && output.memory_peak_bytes <= limits.memory_max_bytes);
+    assert_eq!(output.memory_limit_events, 0);
+    let count = u32::from_be_bytes(output.stdout[..4].try_into().unwrap()) as usize;
+    assert_eq!(count, output.stdout.len() - 4);
+    let report: ArchiveWorkerReport = serde_json::from_slice(&output.stdout[4..]).unwrap();
+    assert_eq!(report.stage_id, "stage_1");
+    assert_eq!(report.manifest_digest, fixture.expected.digest);
+    assert_eq!(report.entry_count, fixture.expected.entry_count);
+    assert_eq!(report.file_count, 3);
+    assert_eq!(report.payload_bytes, fixture.data_bytes + 14);
+    assert_eq!(report.native_snapshot_id.len(), 64);
+    let executable = std::env::var_os("RELIC_TEST_RESTIC").expect("verified restic is required");
+    let password_file = fixture.root.join("password");
+    fs::write(&password_file, b"test-only-password").unwrap();
+    fs::set_permissions(&password_file, fs::Permissions::from_mode(0o600)).unwrap();
+    let archive = Archive {
+        executable: executable.into(),
+        repository,
+        password_file,
+        timeout: Duration::from_secs(60),
+    };
+    archive.check().unwrap();
+    let restored = fixture.root.join("independent_restore");
+    archive
+        .restore(&report.native_snapshot_id, &restored)
+        .unwrap();
+    assert_eq!(
+        fs::read(restored.join("sources/documents/data.bin")).unwrap(),
+        vec![0x5a; fixture.data_bytes as usize]
+    );
+    assert_eq!(
+        fs::read(restored.join("sources/documents/empty")).unwrap(),
+        b""
+    );
+    assert_eq!(
+        fs::read(restored.join("sources/documents/folder/nested")).unwrap(),
+        b"nested content"
+    );
+    println!(
+        "Contained native worker peak: {} bytes; zero memory-limit events",
+        output.memory_peak_bytes
+    );
+}

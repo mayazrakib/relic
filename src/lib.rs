@@ -5,6 +5,8 @@ pub mod archive_disk;
 pub mod archive_manifest;
 #[cfg(feature = "embedded-archive")]
 pub mod archive_source;
+#[cfg(all(feature = "embedded-archive", unix))]
+pub mod archive_worker;
 pub mod artifact_store;
 pub mod config;
 pub mod contracts;
@@ -27,3 +29,7 @@ pub mod scheduler;
 pub mod service;
 pub mod source_scan;
 pub mod state;
+pub mod worker_runtime;
+
+#[cfg(target_os = "linux")]
+mod worker_sandbox;

@@ -66,7 +66,8 @@ impl fmt::Display for ArchiveDiskError {
 
 impl std::error::Error for ArchiveDiskError {}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ArchiveDiskLimits {
     pub max_entries: u64,
     pub max_file_bytes: u64,
@@ -342,9 +343,14 @@ impl Storage {
         Ok(())
     }
 
-    fn acquire_lock(&self, stage_id: &str) -> Result<File, ArchiveDiskError> {
+    fn acquire_lock(&self, stage_id: &str, can_create: bool) -> Result<File, ArchiveDiskError> {
         let name = format!(".archive_{stage_id}.lock");
-        let file = self.open_file(&name, libc::O_RDWR | libc::O_CREAT)?;
+        let flags = if can_create {
+            libc::O_RDWR | libc::O_CREAT
+        } else {
+            libc::O_RDONLY
+        };
+        let file = self.open_file(&name, flags)?;
         match file.try_lock() {
             Ok(()) => {
                 self.check_slot(&name, &get_stamp(&file)?)?;
@@ -691,6 +697,7 @@ impl ArchiveDiskStore {
         &self,
         request: &ArchiveDiskRequest<'_>,
         job: &ActiveJob,
+        can_create_lock: bool,
     ) -> Result<Arc<Lease>, ArchiveDiskError> {
         let limits = request.limits;
         if !is_id(&request.binding.stage_id)
@@ -724,7 +731,9 @@ impl ArchiveDiskStore {
         if capacity.available_bytes < spool_bytes.saturating_add(reserve_bytes) {
             return Err(ArchiveDiskError::LIMIT);
         }
-        let lock = self.0.acquire_lock(&request.binding.stage_id)?;
+        let lock = self
+            .0
+            .acquire_lock(&request.binding.stage_id, can_create_lock)?;
         let reservation = job
             .reserve_stage(
                 Some(&self.0.endpoint_id),
@@ -768,7 +777,7 @@ impl ArchiveDiskStore {
                 request.guard,
             )
             .map_err(|_| ArchiveDiskError::RESOURCE)?;
-        let lease = self.acquire_lease(&request, job)?;
+        let lease = self.acquire_lease(&request, job, true)?;
         let record = state
             .prepare_archive_stage(request.binding)
             .map_err(|_| ArchiveDiskError::STATE)?;
@@ -879,7 +888,7 @@ impl ArchiveDiskStore {
         if record.binding != *request.binding || record.effect_state != "prepared" {
             return Err(ArchiveDiskError::RECONCILIATION_REQUIRED);
         }
-        let lease = self.acquire_lease(&request, job)?;
+        let lease = self.acquire_lease(&request, job, false)?;
         let capture = state
             .get_capture(&record.binding.capture_id)
             .map_err(|_| ArchiveDiskError::STATE)?
@@ -946,7 +955,7 @@ impl ArchiveDiskStore {
         request: ArchiveDiskRequest<'_>,
         job: &ActiveJob,
     ) -> Result<DiskArchiveSource, ArchiveDiskError> {
-        let lease = self.acquire_lease(&request, job)?;
+        let lease = self.acquire_lease(&request, job, false)?;
         let record = state
             .get_archive_stage(&request.binding.stage_id)
             .map_err(|_| ArchiveDiskError::STATE)?

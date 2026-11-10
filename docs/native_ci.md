@@ -51,3 +51,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 13. Frozen Archive Milestone
 
 [Run 42838374013](https://github.com/mayazrakib/relic/actions/runs/42838374013) passed on Linux and macOS for `5828d90`. Windows built successfully but failed the concurrent state initialization test when the five-second initialization lock deadline expired. This is a failed whole-target result. The correction retains the four-worker concurrency case, uses a finite thirty-second initialization-lock deadline, keeps SQLite's five-second busy timeout, and adds a regression that holds the initialization lock beyond five seconds. The correction and new disk staging require fresh native execution.
+
+## 14. Disk Source and Startup Correction Milestone
+
+[Run 42842979485](https://github.com/mayazrakib/relic/actions/runs/42842979485) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `d63fcb7`. This verifies the startup correction on Windows and the platform-applicable disk source and journal fixtures. New contained-worker, read-only state, and Linux ancestor-handle changes require their own native run. Delegated-cgroup and independent executable recovery tests are explicit local checks; their exclusion from default hosted CI does not establish Windows or macOS containment support.

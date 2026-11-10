@@ -274,6 +274,59 @@ pub struct StateStore {
 }
 
 impl StateStore {
+    /// Opens the current schema without initialization; a writer must retain the existing WAL and SHM files.
+    pub fn open_readonly(directory: &Path) -> Result<Self, StateError> {
+        let metadata = fs::symlink_metadata(directory)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(StateError::InsecureDirectory);
+        }
+
+        let canonical_directory = fs::canonicalize(directory)?;
+        let canonical_metadata = fs::metadata(&canonical_directory)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            // SAFETY: geteuid takes no arguments and has no memory safety preconditions.
+            let owner = unsafe { libc::geteuid() };
+            if metadata.dev() != canonical_metadata.dev()
+                || metadata.ino() != canonical_metadata.ino()
+                || metadata.uid() != owner
+                || metadata.mode() & 0o077 != 0
+            {
+                return Err(StateError::InsecureDirectory);
+            }
+        }
+        #[cfg(not(unix))]
+        if !canonical_metadata.is_dir() {
+            return Err(StateError::InsecureDirectory);
+        }
+
+        let path = canonical_directory.join("state.sqlite3");
+        let database = validate_readonly_state_file(&path)?;
+        validate_readonly_state_file(&canonical_directory.join("state.sqlite3-wal"))?;
+        validate_readonly_state_file(&canonical_directory.join("state.sqlite3-shm"))?;
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NOFOLLOW;
+        let connection = Connection::open_with_flags(&path, flags)?;
+        connection.busy_timeout(Duration::from_secs(5))?;
+        connection.pragma_update(None, "query_only", true)?;
+        connection.pragma_update(None, "trusted_schema", false)?;
+        let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version != 6 {
+            return Err(StateError::UnsupportedVersion);
+        }
+        let current = validate_readonly_state_file(&path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if database.dev() != current.dev() || database.ino() != current.ino() {
+                return Err(StateError::InsecureDirectory);
+            }
+        }
+        #[cfg(not(unix))]
+        let _ = (database, current);
+        Ok(Self { connection })
+    }
+
     pub fn open(directory: &Path) -> Result<Self, StateError> {
         if !directory.exists() {
             let mut builder = fs::DirBuilder::new();
@@ -1986,4 +2039,21 @@ fn parse_archive_counter(value: &str) -> Result<u64, StateError> {
         return Err(StateError::InvalidInput);
     }
     Ok(number)
+}
+
+fn validate_readonly_state_file(path: &Path) -> Result<fs::Metadata, StateError> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(StateError::InsecureDirectory);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        // SAFETY: geteuid takes no arguments and has no memory safety preconditions.
+        let owner = unsafe { libc::geteuid() };
+        if metadata.uid() != owner || metadata.mode() & 0o7777 != 0o600 || metadata.nlink() != 1 {
+            return Err(StateError::InsecureDirectory);
+        }
+    }
+    Ok(metadata)
 }

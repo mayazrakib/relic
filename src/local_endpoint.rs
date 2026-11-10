@@ -64,6 +64,11 @@ mod unix {
     const MAX_PATH_BYTES: usize = 65_536;
     const MAX_COMPONENT_BYTES: usize = 4096;
 
+    #[cfg(target_os = "linux")]
+    const DIRECTORY_ACCESS: i32 = libc::O_PATH;
+    #[cfg(not(target_os = "linux"))]
+    const DIRECTORY_ACCESS: i32 = libc::O_RDONLY;
+
     pub struct LocalEndpoint {
         directories: Vec<File>,
         names: Vec<CString>,
@@ -121,7 +126,7 @@ mod unix {
             libc::openat(
                 fd,
                 name.as_ptr(),
-                libc::O_RDONLY
+                DIRECTORY_ACCESS
                     | libc::O_DIRECTORY
                     | libc::O_NOFOLLOW
                     | libc::O_CLOEXEC
@@ -177,7 +182,7 @@ mod unix {
             let fd = unsafe {
                 libc::open(
                     c"/".as_ptr(),
-                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    DIRECTORY_ACCESS | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
                 )
             };
             if fd < 0 {
@@ -216,6 +221,35 @@ mod unix {
             if identities.last().copied() != Some(expected) {
                 return Err(EndpointError::IDENTITY_CHANGED);
             }
+
+            #[cfg(target_os = "linux")]
+            {
+                // Ancestors need identity/traversal authority, not directory listing.
+                // Only the selected endpoint receives a readable directory handle.
+                let pinned = directories.last().unwrap();
+                // SAFETY: the pinned directory and NUL-terminated dot component are live.
+                let fd = unsafe {
+                    libc::openat(
+                        pinned.as_raw_fd(),
+                        c".".as_ptr(),
+                        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    )
+                };
+
+                if fd < 0 {
+                    return Err(io::Error::last_os_error().into());
+                }
+
+                // SAFETY: the newly opened descriptor is transferred exactly once to File.
+                let directory = unsafe { File::from_raw_fd(fd) };
+
+                if get_identity(directory.as_raw_fd())? != expected {
+                    return Err(EndpointError::IDENTITY_CHANGED);
+                }
+
+                *directories.last_mut().unwrap() = directory;
+            }
+
             let mount_id = get_mount_id(directories.last().unwrap().as_raw_fd());
             let endpoint = Self {
                 directories,

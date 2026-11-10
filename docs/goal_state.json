@@ -329,12 +329,12 @@
         "docs/evidence/multipass_sort.json"
     ],
     "blockers": [],
-    "next_action": "Push/observe fresh native CI for disk staging plus Windows initialization deadline correction without restarting a live run. Implement isolated embedded-engine worker with bounded keys/control IPC, aggregate parent/child memory containment, bounded cancellation and reaping, and exact staged manifest verification. Do not create sibling runtime cgroups outside the validation1GiB aggregate envelope; qualify delegated subtree or shared bounded slice first. Then sole-credential fenced mutation gateway and native durable publication/receipts. Extend source segmentation/catalogue and Windows staging as required; retain full13phase scope, MIT, master boundary, one worker and zero swap. Preserve README badge edit.",
+    "next_action": "Push and observe fresh native CI without restarting live jobs. Implement durable native worker-run intents before private repository effects, opaque key/repository ownership and typed report binding, restart reconciliation and retained uncertain leases. Then implement sole-credential fenced destination gateway across every protected mutation, held-snapshot verification and durable native receipts; continue S3 and full13phase scope. Native worker sandbox currentlyLinux-only; preserve Windows/macOS containment, source/metadata expansion, persistent quotas, index/performance and cleanup gates. Longer soaks need explicit finite execution profiles while retaining the1GiB aggregate cap. Preserve README badge; one agent worker maximum, no swap.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "e3a61e54c13a1e8b87abbf7bf351de106b0176be5fbe60dbe70096c2fa841388",
+    "source_fingerprint": "4d21e28c7955de9f1b23030f501a183f2f180f7f2ad305c5775a07a8781eaf74",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -775,31 +775,57 @@
                 "docs/evidence/archive_disk.json"
             ],
             "limits": "Fresh Windows native execution required; maximum two corrective cycles"
+        },
+        {
+            "name": "Linux aggregate-contained archive worker and independent recovery",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "src/worker_runtime.rs",
+                "src/worker_sandbox.rs",
+                "src/archive_worker.rs",
+                "tests/worker_runtime.rs",
+                "tests/archive_disk.rs",
+                "docs/evidence/archive_worker.json"
+            ],
+            "limits": "Private offline staging profile; no production daemon backup dispatch or destination publication; Linux x86_64 delegated cgroup2 and Landlock ABI>=3 required; Windows/macOS worker containment pending; Native worker-run pre-effect journal, repository/key ownership, restart reconciliation and uncertain-lease orchestration still pending; Persistent staging quotas, provider durability, cleanup, key-provider lifecycle, large-index and sustained resource qualification remain open; Current source profile remains portable ASCII files/directories without original metadata; complete source segmentation and platform support pending; S3, sole-credential fenced destination mutations, native durable receipts and all remaining full-system phases remain required"
+        },
+        {
+            "name": "Read-only source journal and Linux least-authority endpoint handles",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "src/state.rs",
+                "src/local_endpoint.rs",
+                "tests/state_readonly.rs",
+                "docs/evidence/archive_worker.json"
+            ],
+            "limits": "Live parent writer and existing WAL/SHM required; fresh native matrix pending"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented journaled one-pass encrypted disk archive source with lazy bounded readers, authenticated catalogue, sealed source snapshots, per-file ownership, resource leases and crash reconciliation. All165 tests pass, zero ignored; final test peak768.4M/no swap; Clippy and formatting pass. Native archive source-deletion fixture matches frozen manifest. Prior5828d90 CI passed Linux/macOS but Windows initialization lock timed out; finite30s correction and5.5s held-lock regression pass locally. Full goal active; worker containment, destination fencing/receipts and later phases remain required."
+        "result": "Implemented contained private archive worker with bounded keys/control framing, nonblocking pipes, delegated child cgroups inside the1GiB aggregate limit, CPU/tasks/descriptors caps, Landlock/syscall restrictions, no core dumps/capabilities, readonly SQLite and source locks, and Linux path-only ancestor handles. All180 tests pass with zero ignored; final suite peak769.6M/no swap. Clippy290.7M and default-feature build619M pass. Source/payload-deletion native fixture passes in192MiB worker cap and independently restores via restic. Prior d63fcb7 CI succeeded all3targets, resolving Windows startup deadline. Full goal remains active; durable worker lifecycle and final destination fencing/receipts next."
     },
     "remote_checkpoint": {
-        "commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
+        "commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42838374013,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42838374013",
-        "status": "in_progress_when_observed",
+        "native_ci_run_id": 42842979485,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42842979485",
+        "status": "queued_when_observed",
         "push_transport": "existing authorized SSH credential"
     },
     "prior_native_checkpoint": {
-        "commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
+        "commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42838374013,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42838374013",
-        "status": "completed_with_windows_initialization_timeout",
+        "native_ci_run_id": 42842979485,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42842979485",
+        "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
             "linux-x86_64": "success",
-            "macos-arm64": "success",
-            "windows-x86_64": "failure: five-second initialization lock deadline expired"
+            "windows-x86_64": "success",
+            "macos-arm64": "success"
         }
     },
     "earlier_native_checkpoints": [
@@ -866,6 +892,19 @@
                 "linux-x86_64": "success",
                 "windows-x86_64": "success",
                 "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42838374013,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42838374013",
+            "status": "completed_with_windows_initialization_timeout",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "macos-arm64": "success",
+                "windows-x86_64": "failure: five-second initialization lock deadline expired"
             }
         }
     ],
@@ -937,7 +976,9 @@
             "corrective_cycles": 1,
             "max_corrective_cycles": 2,
             "correction": "Named finite30s initialization wait; retain SQLite5s busy timeout and four-worker concurrency fixture; add5.5s held-lock regression",
-            "status": "locally_resolved_pending_native_verification"
+            "status": "resolved",
+            "corrective_commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
+            "verification_run": 42842979485
         }
     },
     "preserved_worktree_changes": [

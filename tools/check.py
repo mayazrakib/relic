@@ -22,6 +22,10 @@ def verify_envelope() -> None:
         raise RuntimeError("A unified memory cgroup is required.")
 
     directory = Path("/sys/fs/cgroup") / membership.lstrip("/")
+
+    if directory.name == "supervisor":
+        directory = directory.parent
+
     maximum = (directory / "memory.max").read_text().strip()
     high = (directory / "memory.high").read_text().strip()
     swap = (directory / "memory.swap.max").read_text().strip()
@@ -38,6 +42,20 @@ def verify_envelope() -> None:
     )
 
 
+def prepare_delegation() -> None:
+    memberships = Path("/proc/self/cgroup").read_text().splitlines()
+    membership = next(line[3:] for line in memberships if line.startswith("0::"))
+    directory = Path("/sys/fs/cgroup") / membership.lstrip("/")
+
+    if directory.name != f"{UNIT_NAME}.service":
+        raise RuntimeError("The validation delegation root is not the expected service.")
+
+    supervisor = directory / "supervisor"
+    supervisor.mkdir(exist_ok=True)
+    (supervisor / "cgroup.procs").write_text(str(os.getpid()))
+    (directory / "cgroup.subtree_control").write_text("+cpu +memory +pids")
+
+
 def run_check(arguments: list[str]) -> int:
     if sys.platform != "linux":
         raise RuntimeError("This development guard requires Linux and a user systemd manager.")
@@ -45,6 +63,8 @@ def run_check(arguments: list[str]) -> int:
     is_inside = bool(arguments) and arguments[0] == "--inside"
 
     if is_inside:
+        verify_envelope()
+        prepare_delegation()
         verify_envelope()
         arguments = arguments[1:]
         cargo = arguments.pop(0) if arguments else None
@@ -81,6 +101,8 @@ def run_check(arguments: list[str]) -> int:
         "--property=MemorySwapMax=0",
         "--property=TasksMax=128",
         "--property=CPUQuota=200%",
+        "--property=Delegate=yes",
+        "--property=RuntimeMaxSec=900",
         f"--property=WorkingDirectory={root}",
         "--setenv=CARGO_BUILD_JOBS=1",
         "--setenv=CARGO_INCREMENTAL=0",
