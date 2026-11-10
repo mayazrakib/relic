@@ -606,6 +606,21 @@ fn refuses_wrong_key_corrupt_payload_cancellation_and_limits() {
 fn reconciles_absent_prepared_intent_and_rejects_replaced_final_tree() {
     let mut fixture = Fixture::new();
     let binding = fixture.get_binding("restore_1");
+    #[cfg(target_os = "linux")]
+    {
+        use relic::physical_registry::{PhysicalRootClaim, PhysicalRootKind, register_roots};
+        let endpoint = resolve_endpoint(&fixture.root.join("target"));
+        register_roots(
+            &mut fixture.state,
+            &[PhysicalRootClaim {
+                kind: PhysicalRootKind::RESTORE,
+                owner_id: &binding.target_endpoint_id,
+                endpoint: &endpoint,
+            }],
+            &fixture.guard,
+        )
+        .unwrap();
+    }
     assert_eq!(
         fixture
             .state

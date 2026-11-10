@@ -109,3 +109,100 @@ fn native_temp_and_test_binary_directory_can_be_proven_disjoint() {
         assert_ne!(scopes[0].domain, scopes[1].domain);
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn physical_observations_detect_overlap_and_reject_malformed_or_stale_evidence() {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use relic::local_endpoint::{
+        compare_physical_scope_observations, get_physical_scope_observation,
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let left_path = temporary.path().join("literal (deleted)");
+    let right_path = temporary.path().join("sibling");
+    fs::create_dir(&left_path).unwrap();
+    fs::create_dir(&right_path).unwrap();
+    let left = LocalEndpoint::resolve(&left_path, get_identity(&left_path)).unwrap();
+    let right = LocalEndpoint::resolve(&right_path, get_identity(&right_path)).unwrap();
+    let left = match get_physical_scope_observation(&left) {
+        Ok(value) => value,
+        Err(EndpointError::AMBIGUOUS_SCOPE) => return,
+        Err(error) => panic!("unexpected observation error: {error}"),
+    };
+    let right = get_physical_scope_observation(&right).unwrap();
+    assert!(
+        URL_SAFE_NO_PAD
+            .decode(&left.path_base64url)
+            .unwrap()
+            .ends_with(b"literal (deleted)")
+    );
+    compare_physical_scope_observations(&left, &right).unwrap();
+    let mut hidden = right.clone();
+    hidden.origin_components_base64url = left.origin_components_base64url.clone();
+    hidden
+        .origin_components_base64url
+        .push(URL_SAFE_NO_PAD.encode(b"nested"));
+    assert!(matches!(
+        compare_physical_scope_observations(&left, &hidden),
+        Err(EndpointError::OVERLAP)
+    ));
+    relic::local_endpoint::validate_physical_scope_observation(&left).unwrap();
+    let mut invalid = right.clone();
+    invalid.path_base64url.push('=');
+    assert!(relic::local_endpoint::validate_physical_scope_observation(&invalid).is_err());
+    assert!(compare_physical_scope_observations(&left, &invalid).is_err());
+    let mut invalid = right.clone();
+    invalid
+        .origin_components_base64url
+        .push(URL_SAFE_NO_PAD.encode(b".."));
+    assert!(compare_physical_scope_observations(&left, &invalid).is_err());
+    let mut stale = right.clone();
+    stale.boot_id = "00000000-0000-0000-0000-000000000000".into();
+    assert!(matches!(
+        compare_physical_scope_observations(&left, &stale),
+        Err(EndpointError::AMBIGUOUS_SCOPE)
+    ));
+    let mut stale = right.clone();
+    stale.mount_namespace_inode = stale.mount_namespace_inode.saturating_add(1);
+    assert!(matches!(
+        compare_physical_scope_observations(&left, &stale),
+        Err(EndpointError::AMBIGUOUS_SCOPE)
+    ));
+    let mut stale = right.clone();
+    stale.mountinfo_sha256 = format!("sha256:{}", "0".repeat(64));
+    assert!(matches!(
+        compare_physical_scope_observations(&left, &stale),
+        Err(EndpointError::AMBIGUOUS_SCOPE)
+    ));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Linux unshare(CLONE_FILES) allowed by the host policy"]
+fn observation_uses_calling_threads_unshared_descriptor_table() {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use relic::local_endpoint::{
+        get_physical_scope_observation, validate_physical_scope_observation,
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let target = temporary.path().join("after_unshare");
+    std::thread::spawn(move || {
+        // SAFETY: unshare changes only the calling thread's descriptor table.
+        assert_eq!(
+            unsafe { libc::unshare(libc::CLONE_FILES) },
+            0,
+            "unshare(CLONE_FILES) failed: {}",
+            std::io::Error::last_os_error()
+        );
+        fs::create_dir(&target).unwrap();
+        let endpoint = LocalEndpoint::resolve(&target, get_identity(&target)).unwrap();
+        let observed = get_physical_scope_observation(&endpoint).unwrap();
+        validate_physical_scope_observation(&observed).unwrap();
+        assert_eq!(
+            URL_SAFE_NO_PAD.decode(observed.path_base64url).unwrap(),
+            target.as_os_str().as_encoded_bytes()
+        );
+    })
+    .join()
+    .unwrap();
+}

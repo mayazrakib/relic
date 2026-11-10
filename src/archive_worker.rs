@@ -554,7 +554,16 @@ mod linux {
         ] {
             check_path(path)?;
         }
-        let state_endpoint = get_endpoint(&request.state_dir)?;
+        let state_metadata =
+            fs::symlink_metadata(&request.state_dir).map_err(|_| WorkerProtocolError::IO)?;
+        let state_endpoint = LocalEndpoint::resolve_metadata(
+            &request.state_dir,
+            FileIdentity {
+                device: state_metadata.dev(),
+                inode: state_metadata.ino(),
+            },
+        )
+        .map_err(|_| WorkerProtocolError::STATE)?;
         let repo_endpoint = get_endpoint(&request.repository_dir)?;
         let scratch_endpoint = get_endpoint(&request.scratch_dir)?;
         if repo_endpoint.identity()
@@ -652,6 +661,16 @@ mod linux {
             deadline: Instant::now().checked_add(Duration::from_secs(request.timeout_seconds)),
             ..StageGuard::default()
         };
+        for endpoint in [&repo_endpoint, &scratch_endpoint] {
+            crate::physical_registry::check_registered_access(
+                &state,
+                crate::physical_registry::PhysicalRootKind::STAGING,
+                &run.binding.storage_endpoint_id,
+                endpoint,
+                &guard,
+            )
+            .map_err(|_| WorkerProtocolError::STATE)?;
+        }
         let pool = ResourcePool::new(
             ResourceClass::BALANCED,
             std::thread::available_parallelism().map_or(1, usize::from),
@@ -692,6 +711,14 @@ mod linux {
             }
             check_path(&request.archive_dir)?;
             let archive_endpoint = get_endpoint(&request.archive_dir)?;
+            crate::physical_registry::check_registered_access(
+                &state,
+                crate::physical_registry::PhysicalRootKind::STAGING,
+                &stage.binding.storage_endpoint_id,
+                &archive_endpoint,
+                &guard,
+            )
+            .map_err(|_| WorkerProtocolError::STATE)?;
             get_disjoint_scope_evidence(&[
                 &state_endpoint,
                 &archive_endpoint,

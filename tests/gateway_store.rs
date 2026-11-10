@@ -98,6 +98,85 @@ fn creates_private_layout_and_replays_immutable_identities() {
 }
 
 #[test]
+fn gateway_preparation_respects_registered_physical_roots() {
+    use relic::physical_registry::{PhysicalRootClaim, PhysicalRootKind, register_roots};
+
+    let mut fixture = create_fixture();
+    let guard = StageGuard::default();
+    let layout = fixture
+        .store
+        .prepare(&mut fixture.state, &fixture.binding, &guard)
+        .unwrap();
+    assert_eq!(
+        fixture
+            .store
+            .prepare(&mut fixture.state, &fixture.binding, &guard)
+            .unwrap(),
+        layout
+    );
+
+    let staging = fixture.directory.path().join("staging");
+    fs::create_dir(&staging).unwrap();
+    fs::set_permissions(&staging, fs::Permissions::from_mode(0o700)).unwrap();
+    let staging_endpoint = get_endpoint(&staging);
+    register_roots(
+        &mut fixture.state,
+        &[PhysicalRootClaim {
+            kind: PhysicalRootKind::STAGING,
+            owner_id: "staging_endpoint",
+            endpoint: &staging_endpoint,
+        }],
+        &guard,
+    )
+    .unwrap();
+
+    let nested = fixture.directory.path().join("target/nested");
+    let staging_nested = staging.join("nested");
+    for path in [&nested, &staging_nested] {
+        fs::create_dir(path).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let state_path = fixture.directory.path().join("state");
+    for (id, path) in [
+        ("nested_gateway", &nested),
+        ("state_gateway", &state_path),
+        ("staging_gateway", &staging_nested),
+    ] {
+        let store = LocalGatewayStore::new(get_endpoint(path), path, "endpoint").unwrap();
+        let binding = GatewayResourceBinding {
+            resource_id: id.into(),
+            authority_id: "authority".into(),
+            storage_endpoint_id: "endpoint".into(),
+            storage_identity: store.storage_identity().into(),
+            repository_key_ref: "target_key".into(),
+        };
+        assert!(store.prepare(&mut fixture.state, &binding, &guard).is_err());
+        assert!(fixture.state.get_gateway_resource(id).unwrap().is_none());
+        assert!(!path.join(".relic-owner.lock").exists());
+        assert!(!path.join("config").exists());
+    }
+
+    let sibling = fixture.directory.path().join("sibling");
+    fs::create_dir(&sibling).unwrap();
+    fs::set_permissions(&sibling, fs::Permissions::from_mode(0o700)).unwrap();
+    let store = LocalGatewayStore::new(get_endpoint(&sibling), &sibling, "endpoint").unwrap();
+    let binding = GatewayResourceBinding {
+        resource_id: "sibling".into(),
+        authority_id: "authority".into(),
+        storage_endpoint_id: "endpoint".into(),
+        storage_identity: store.storage_identity().into(),
+        repository_key_ref: "target_key".into(),
+    };
+    assert_eq!(
+        store
+            .prepare(&mut fixture.state, &binding, &guard)
+            .unwrap()
+            .effect_state,
+        "ready"
+    );
+}
+
+#[test]
 fn foreign_files_and_replaced_layout_are_preserved_and_rejected() {
     let mut fixture = create_fixture();
     let guard = StageGuard::default();
@@ -260,6 +339,7 @@ fn initializes_and_recovers_completed_native_repository_after_store_restart() {
 #[test]
 #[ignore = "requires verified delegated Linux cgroup development guard with Landlock"]
 fn recovery_quiesces_recorded_orphan_before_probing_owner_lock() {
+    use relic::physical_registry::{PhysicalRootClaim, PhysicalRootKind, register_roots};
     use relic::worker_runtime::execute_worker_recorded;
     use std::sync::mpsc;
     use std::time::Instant;
@@ -272,6 +352,18 @@ fn recovery_quiesces_recorded_orphan_before_probing_owner_lock() {
     } = create_fixture();
     let guard = StageGuard::default();
     store.prepare(&mut state, &binding, &guard).unwrap();
+    let executable = fs::canonicalize(env!("CARGO_BIN_EXE_relic-gateway-worker")).unwrap();
+    let executable_endpoint = get_endpoint(executable.parent().unwrap());
+    register_roots(
+        &mut state,
+        &[PhysicalRootClaim {
+            kind: PhysicalRootKind::EXECUTABLE,
+            owner_id: "gateway_worker_binary",
+            endpoint: &executable_endpoint,
+        }],
+        &guard,
+    )
+    .unwrap();
     state
         .start_gateway_initialization("resource", 1, 1)
         .unwrap();

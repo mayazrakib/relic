@@ -212,6 +212,18 @@ mod linux {
         .map_err(|_| Error::STATE)
     }
 
+    fn get_metadata_endpoint(path: &Path) -> Result<LocalEndpoint, Error> {
+        let metadata = fs::symlink_metadata(path).map_err(|_| Error::IO)?;
+        LocalEndpoint::resolve_metadata(
+            path,
+            FileIdentity {
+                device: metadata.dev(),
+                inode: metadata.ino(),
+            },
+        )
+        .map_err(|_| Error::STATE)
+    }
+
     fn acquire_owner(root: &LocalEndpoint, request: &GatewayWorkerRequest) -> Result<File, Error> {
         // SAFETY: root is pinned and the component is static, NUL-terminated.
         let fd = unsafe {
@@ -660,7 +672,7 @@ mod linux {
             deadline: Instant::now().checked_add(Duration::from_secs(request.timeout_seconds)),
             ..StageGuard::default()
         };
-        let state_endpoint = get_endpoint(&request.state_dir)?;
+        let state_endpoint = get_metadata_endpoint(&request.state_dir)?;
         get_disjoint_scope_evidence(&[&state_endpoint, root]).map_err(|_| Error::STATE)?;
         let retained = sync_repository(root, request.repository_max_bytes, &guard)?;
         let can_write = request.operation == Operation::COPY;
@@ -815,6 +827,14 @@ mod linux {
                 return Err(Error::STATE);
             }
             source_lock.try_lock().map_err(|_| Error::STATE)?;
+            crate::physical_registry::check_registered_access(
+                state,
+                crate::physical_registry::PhysicalRootKind::STAGING,
+                &run.binding.storage_endpoint_id,
+                &source,
+                &guard,
+            )
+            .map_err(|_| Error::STATE)?;
             check_lock_slot(&parent, c"owner.lock", &source_lock)?;
             let backend = BackendOptions::default()
                 .repository(source_path.to_str().ok_or(Error::INVALID)?)
@@ -1096,6 +1116,14 @@ mod linux {
             .get_gateway_layout(&request.resource_id)
             .map_err(|_| Error::STATE)?
             .ok_or(Error::STATE)?;
+        crate::physical_registry::check_registered_access(
+            &state,
+            crate::physical_registry::PhysicalRootKind::GATEWAY,
+            &request.resource_id,
+            &root,
+            &StageGuard::default(),
+        )
+        .map_err(|_| Error::STATE)?;
         if layout.owner_identity.as_deref()
             != Some(
                 format!(
@@ -1220,7 +1248,7 @@ mod linux {
         };
         use std::sync::Arc;
         use std::time::{Duration, Instant};
-        let state_endpoint = get_endpoint(&request.state_dir)?;
+        let state_endpoint = get_metadata_endpoint(&request.state_dir)?;
         get_disjoint_scope_evidence(&[&state_endpoint, &root]).map_err(|_| Error::STATE)?;
         let guard = StageGuard {
             deadline: Instant::now().checked_add(Duration::from_secs(request.timeout_seconds)),

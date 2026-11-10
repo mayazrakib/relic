@@ -213,7 +213,7 @@ fn schema_ten_bound_scratch_closes_inventory_until_trusted_inventory() {
          INSERT INTO staging_quota SELECT * FROM staging_quota_future;
          DROP TABLE staging_quota_future;
          CREATE INDEX staging_quota_volume ON staging_quota(volume_identity);
-         ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version=10;",
+         DROP TABLE physical_roots; DROP TABLE physical_registry_meta; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version=10;",
     ).unwrap();
     drop(db);
     let mut store = StateStore::open(&path).unwrap();

@@ -419,6 +419,16 @@ impl LocalGatewayStore {
         {
             return Err(GatewayStoreError::STORAGE);
         }
+        crate::physical_registry::register_roots(
+            state,
+            &[crate::physical_registry::PhysicalRootClaim {
+                kind: crate::physical_registry::PhysicalRootKind::GATEWAY,
+                owner_id: &binding.resource_id,
+                endpoint: &self.endpoint,
+            }],
+            guard,
+        )
+        .map_err(|_| GatewayStoreError::RECONCILIATION_REQUIRED)?;
         let resource = state
             .prepare_gateway_resource(binding)
             .map_err(|_| GatewayStoreError::STATE)?;
@@ -527,9 +537,10 @@ impl LocalGatewayStore {
     }
     fn validate_execution(
         &self,
-        state: &StateStore,
+        state: &mut StateStore,
         resource: &GatewayResourceRecord,
         context: &GatewayExecutionContext<'_>,
+        is_recovery: bool,
     ) -> Result<(), GatewayStoreError> {
         context
             .guard
@@ -570,6 +581,36 @@ impl LocalGatewayStore {
             .map_err(|_| GatewayStoreError::STORAGE)?;
         get_disjoint_scope_evidence(&[&self.endpoint, &executable_endpoint])
             .map_err(|_| GatewayStoreError::STORAGE)?;
+        if is_recovery {
+            use crate::physical_registry::{PhysicalRootKind, check_registered_access};
+            for (kind, owner, endpoint) in [
+                (
+                    PhysicalRootKind::EXECUTABLE,
+                    "gateway_worker_binary",
+                    &executable_endpoint,
+                ),
+                (PhysicalRootKind::STATE, "node", &state_endpoint),
+                (
+                    PhysicalRootKind::GATEWAY,
+                    resource.binding.resource_id.as_str(),
+                    &self.endpoint,
+                ),
+            ] {
+                check_registered_access(state, kind, owner, endpoint, context.guard)
+                    .map_err(|_| GatewayStoreError::RECONCILIATION_REQUIRED)?;
+            }
+        } else {
+            crate::physical_registry::register_roots(
+                state,
+                &[crate::physical_registry::PhysicalRootClaim {
+                    kind: crate::physical_registry::PhysicalRootKind::EXECUTABLE,
+                    owner_id: "gateway_worker_binary",
+                    endpoint: &executable_endpoint,
+                }],
+                context.guard,
+            )
+            .map_err(|_| GatewayStoreError::RECONCILIATION_REQUIRED)?;
+        }
         Ok(())
     }
     fn check_capacity(
@@ -604,7 +645,7 @@ impl LocalGatewayStore {
             .get_gateway_resource(id)
             .map_err(|_| GatewayStoreError::STATE)?
             .ok_or(GatewayStoreError::STATE)?;
-        self.validate_execution(state, &resource, context)?;
+        self.validate_execution(state, &resource, context, false)?;
         let coordinator = self.acquire_coordinator(false)?;
         let layout = state
             .get_gateway_layout(id)
@@ -645,7 +686,7 @@ impl LocalGatewayStore {
             .get_gateway_resource(id)
             .map_err(|_| GatewayStoreError::STATE)?
             .ok_or(GatewayStoreError::STATE)?;
-        self.validate_execution(state, &resource, context)?;
+        self.validate_execution(state, &resource, context, true)?;
         let coordinator = self.acquire_coordinator(false)?;
         let mut layout = state
             .get_gateway_layout(id)
@@ -774,7 +815,10 @@ impl LocalGatewayStore {
         }
         let mut input = Zeroizing::new((body.len() as u32).to_be_bytes().to_vec());
         input.extend_from_slice(&body);
-        let read_paths = vec![context.state_dir.to_path_buf(), self.root.clone()];
+        let mut read_paths =
+            crate::worker_state::get_readonly_state_paths(state, context.state_dir)
+                .map_err(|_| GatewayStoreError::STATE)?;
+        read_paths.push(self.root.clone());
         let write_paths = if is_inspection {
             vec![]
         } else {

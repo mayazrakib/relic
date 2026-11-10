@@ -1,6 +1,7 @@
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FileIdentity {
     pub device: u64,
     pub inode: u64,
@@ -178,7 +179,7 @@ mod unix {
         minor: u32,
         root: Vec<Vec<u8>>,
         mountpoint: Vec<Vec<u8>>,
-        native: bool,
+        fs_type: String,
     }
 
     #[cfg(target_os = "linux")]
@@ -278,7 +279,9 @@ mod unix {
                 minor,
                 root: decode_mount_path(fields[3])?,
                 mountpoint: decode_mount_path(fields[4])?,
-                native: matches!(fields[separator + 1], b"ext4" | b"btrfs" | b"xfs"),
+                fs_type: std::str::from_utf8(fields[separator + 1])
+                    .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?
+                    .to_owned(),
             });
         }
         if result.is_empty() {
@@ -290,8 +293,8 @@ mod unix {
     #[cfg(target_os = "linux")]
     fn read_mountinfo() -> Result<Vec<u8>, EndpointError> {
         use std::io::Read;
-        let file =
-            File::open("/proc/self/mountinfo").map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        let file = File::open("/proc/thread-self/mountinfo")
+            .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
         let mut result = Vec::new();
         file.take(512 * 1024 + 1)
             .read_to_end(&mut result)
@@ -313,7 +316,7 @@ mod unix {
             .iter()
             .find(|mount| mount.id == id)
             .ok_or(EndpointError::AMBIGUOUS_SCOPE)?;
-        if !selected.native
+        if !matches!(selected.fs_type.as_str(), "ext4" | "btrfs" | "xfs")
             || libc::major(device) != selected.major
             || libc::minor(device) != selected.minor
         {
@@ -334,21 +337,321 @@ mod unix {
     }
 
     #[cfg(target_os = "linux")]
+    fn split_native_path(bytes: &[u8]) -> Result<Vec<Vec<u8>>, EndpointError> {
+        if bytes.is_empty()
+            || bytes.len() > MAX_PATH_BYTES
+            || bytes[0] != b'/'
+            || bytes.contains(&0)
+        {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        if bytes == b"/" {
+            return Ok(Vec::new());
+        }
+        let mut result = Vec::new();
+        for component in bytes[1..].split(|byte| *byte == b'/') {
+            if component.is_empty()
+                || component.len() > MAX_COMPONENT_BYTES
+                || component == b"."
+                || component == b".."
+            {
+                return Err(EndpointError::AMBIGUOUS_SCOPE);
+            }
+            result.push(component.to_vec());
+            if result.len() > MAX_DEPTH {
+                return Err(EndpointError::LIMIT_EXCEEDED);
+            }
+        }
+        Ok(result)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_kernel_path(endpoint: &LocalEndpoint) -> Result<Vec<u8>, EndpointError> {
+        let proc_path = CString::new(format!(
+            "/proc/thread-self/fd/{}",
+            endpoint.directory().as_raw_fd()
+        ))
+        .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        let mut bytes = vec![0u8; MAX_PATH_BYTES + 1];
+        // SAFETY: the proc path and writable bounded buffer are valid for readlink.
+        let count =
+            unsafe { libc::readlink(proc_path.as_ptr(), bytes.as_mut_ptr().cast(), bytes.len()) };
+        if count < 0 {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        let count = usize::try_from(count).map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        if count > MAX_PATH_BYTES {
+            return Err(EndpointError::LIMIT_EXCEEDED);
+        }
+        bytes.truncate(count);
+        split_native_path(&bytes)?;
+        Ok(bytes)
+    }
+
+    #[cfg(target_os = "linux")]
     fn get_origin(
         endpoint: &LocalEndpoint,
         mounts: &[MountEntry],
     ) -> Result<Vec<Vec<u8>>, EndpointError> {
         let id = endpoint.mount_id.ok_or(EndpointError::AMBIGUOUS_SCOPE)?;
-        let namespace: Vec<Vec<u8>> = endpoint
-            .names
-            .iter()
-            .map(|name| name.as_bytes().to_vec())
-            .collect();
+        let namespace = split_native_path(&get_kernel_path(endpoint)?)?;
         get_mount_origin(id, endpoint.identity().device, &namespace, mounts)
+    }
+
+    /// Kernel-derived snapshot for registry admission; callers must reobserve it at the effect boundary.
+    #[cfg(target_os = "linux")]
+    #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct PhysicalScopeObservation {
+        pub path_base64url: String,
+        pub device: u64,
+        pub inode: u64,
+        pub mount_id: u64,
+        pub ancestor_identities: Vec<FileIdentity>,
+        pub boot_id: String,
+        pub mount_namespace_inode: u64,
+        pub fs_type: String,
+        pub origin_components_base64url: Vec<String>,
+        pub mountinfo_sha256: String,
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_boot_id() -> Result<String, EndpointError> {
+        let value = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+            .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        let value = value.trim();
+        let parsed = uuid::Uuid::parse_str(value).map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        if parsed.to_string() != value {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        Ok(value.to_owned())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_mount_namespace() -> Result<u64, EndpointError> {
+        use std::os::unix::fs::MetadataExt;
+        let inode = std::fs::metadata("/proc/thread-self/ns/mnt")
+            .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?
+            .ino();
+        if inode == 0 {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        Ok(inode)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn hash_mountinfo(bytes: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        let encoded: String = Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        format!("sha256:{encoded}")
+    }
+
+    /// Reads bounded mount evidence around a pinned, revalidated directory.
+    #[cfg(target_os = "linux")]
+    pub fn get_physical_scope_observation(
+        endpoint: &LocalEndpoint,
+    ) -> Result<PhysicalScopeObservation, EndpointError> {
+        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        endpoint.revalidate()?;
+        let boot_id = get_boot_id()?;
+        let mount_namespace_inode = get_mount_namespace()?;
+        let path = get_kernel_path(endpoint)?;
+        let namespace = split_native_path(&path)?;
+        let mount_snapshot = read_mountinfo()?;
+        let mounts = parse_mountinfo(&mount_snapshot)?;
+        let mount_id = endpoint.mount_id.ok_or(EndpointError::AMBIGUOUS_SCOPE)?;
+        let origin = get_mount_origin(mount_id, endpoint.identity().device, &namespace, &mounts)?;
+        let fs_type = mounts
+            .iter()
+            .find(|entry| entry.id == mount_id)
+            .ok_or(EndpointError::AMBIGUOUS_SCOPE)?
+            .fs_type
+            .clone();
+        if endpoint.identities.len() != namespace.len() + 1 {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        if get_kernel_path(endpoint)? != path
+            || read_mountinfo()? != mount_snapshot
+            || get_boot_id()? != boot_id
+            || get_mount_namespace()? != mount_namespace_inode
+        {
+            return Err(EndpointError::IDENTITY_CHANGED);
+        }
+        endpoint.revalidate()?;
+        let observation = PhysicalScopeObservation {
+            path_base64url: URL_SAFE_NO_PAD.encode(path),
+            device: endpoint.identity().device,
+            inode: endpoint.identity().inode,
+            mount_id,
+            ancestor_identities: endpoint.identities.clone(),
+            boot_id,
+            mount_namespace_inode,
+            fs_type,
+            origin_components_base64url: origin
+                .iter()
+                .map(|component| URL_SAFE_NO_PAD.encode(component))
+                .collect(),
+            mountinfo_sha256: hash_mountinfo(&mount_snapshot),
+        };
+        validate_observation(&observation)?;
+        Ok(observation)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn decode_component(value: &str, max_bytes: usize) -> Result<Vec<u8>, EndpointError> {
+        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        if value.len() > max_bytes.saturating_mul(4).div_ceil(3) {
+            return Err(EndpointError::LIMIT_EXCEEDED);
+        }
+        let bytes = URL_SAFE_NO_PAD
+            .decode(value)
+            .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        if bytes.len() > max_bytes || URL_SAFE_NO_PAD.encode(&bytes) != value {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        Ok(bytes)
+    }
+
+    #[cfg(target_os = "linux")]
+    type ObservationPaths = (Vec<Vec<u8>>, Vec<Vec<u8>>);
+
+    #[cfg(target_os = "linux")]
+    fn validate_observation(
+        value: &PhysicalScopeObservation,
+    ) -> Result<ObservationPaths, EndpointError> {
+        if value.mount_id == 0
+            || value.inode == 0
+            || value.mount_namespace_inode == 0
+            || !matches!(value.fs_type.as_str(), "ext4" | "btrfs" | "xfs")
+            || value.ancestor_identities.is_empty()
+            || value.ancestor_identities.len() > MAX_DEPTH + 1
+            || value.origin_components_base64url.len() > MAX_DEPTH * 2
+            || value.mountinfo_sha256.len() != 71
+            || !value.mountinfo_sha256.starts_with("sha256:")
+            || !value.mountinfo_sha256[7..]
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        let boot =
+            uuid::Uuid::parse_str(&value.boot_id).map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?;
+        if boot.to_string() != value.boot_id {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        let path = split_native_path(&decode_component(&value.path_base64url, MAX_PATH_BYTES)?)?;
+        if path.len() + 1 != value.ancestor_identities.len()
+            || value.ancestor_identities.last()
+                != Some(&FileIdentity {
+                    device: value.device,
+                    inode: value.inode,
+                })
+            || value.ancestor_identities.iter().any(|item| item.inode == 0)
+        {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        let mut total = value.path_base64url.len();
+        let mut origins = Vec::with_capacity(value.origin_components_base64url.len());
+        for encoded in &value.origin_components_base64url {
+            total = total
+                .checked_add(encoded.len())
+                .ok_or(EndpointError::LIMIT_EXCEEDED)?;
+            if total > 256 * 1024 {
+                return Err(EndpointError::LIMIT_EXCEEDED);
+            }
+            let component = decode_component(encoded, MAX_COMPONENT_BYTES)?;
+            if component.is_empty()
+                || component.contains(&0)
+                || component.contains(&b'/')
+                || component == b"."
+                || component == b".."
+            {
+                return Err(EndpointError::AMBIGUOUS_SCOPE);
+            }
+            origins.push(component);
+        }
+        if serde_json::to_vec(value)
+            .map_err(|_| EndpointError::AMBIGUOUS_SCOPE)?
+            .len()
+            > 256 * 1024
+        {
+            return Err(EndpointError::LIMIT_EXCEEDED);
+        }
+        Ok((path, origins))
+    }
+
+    /// Validates the encoding and internal structure of one observation.
+    #[cfg(target_os = "linux")]
+    pub fn validate_physical_scope_observation(
+        value: &PhysicalScopeObservation,
+    ) -> Result<(), EndpointError> {
+        validate_observation(value).map(|_| ())
+    }
+
+    /// Compares validated snapshots; this does not replace exclusive control or fresh re-observation.
+    #[cfg(target_os = "linux")]
+    pub fn compare_physical_scope_observations(
+        left: &PhysicalScopeObservation,
+        right: &PhysicalScopeObservation,
+    ) -> Result<(), EndpointError> {
+        let (left_path, left_origin) = validate_observation(left)?;
+        let (right_path, right_origin) = validate_observation(right)?;
+        if left.boot_id != right.boot_id
+            || left.mount_namespace_inode != right.mount_namespace_inode
+            || left.mountinfo_sha256 != right.mountinfo_sha256
+        {
+            return Err(EndpointError::AMBIGUOUS_SCOPE);
+        }
+        let left_id = FileIdentity {
+            device: left.device,
+            inode: left.inode,
+        };
+        let right_id = FileIdentity {
+            device: right.device,
+            inode: right.inode,
+        };
+        if left.ancestor_identities.contains(&right_id)
+            || right.ancestor_identities.contains(&left_id)
+            || left_path.starts_with(&right_path)
+            || right_path.starts_with(&left_path)
+        {
+            return Err(EndpointError::OVERLAP);
+        }
+        if left.device == right.device {
+            if left.fs_type != right.fs_type {
+                return Err(EndpointError::AMBIGUOUS_SCOPE);
+            }
+            if left_origin.starts_with(&right_origin) || right_origin.starts_with(&left_origin) {
+                return Err(EndpointError::OVERLAP);
+            }
+        }
+        Ok(())
     }
 
     impl LocalEndpoint {
         pub fn resolve(path: &Path, expected: FileIdentity) -> Result<Self, EndpointError> {
+            Self::resolve_with_access(path, expected, true)
+        }
+
+        /// Pin the endpoint for identity and scope checks without directory-read authority.
+        #[cfg(target_os = "linux")]
+        pub fn resolve_metadata(
+            path: &Path,
+            expected: FileIdentity,
+        ) -> Result<Self, EndpointError> {
+            Self::resolve_with_access(path, expected, false)
+        }
+
+        fn resolve_with_access(
+            path: &Path,
+            expected: FileIdentity,
+            readable: bool,
+        ) -> Result<Self, EndpointError> {
+            #[cfg(not(target_os = "linux"))]
+            let _ = readable;
             if !path.is_absolute() {
                 return Err(EndpointError::INVALID_PATH);
             }
@@ -400,7 +703,7 @@ mod unix {
             }
 
             #[cfg(target_os = "linux")]
-            {
+            if readable {
                 // Ancestors need identity/traversal authority, not directory listing.
                 // Only the selected endpoint receives a readable directory handle.
                 let pinned = directories.last().unwrap();
@@ -527,14 +830,23 @@ mod unix {
             }
         }
         #[cfg(target_os = "linux")]
-        let (mount_snapshot, origins) = {
+        let (mount_snapshot, origins, kernel_paths) = {
             let snapshot = read_mountinfo()?;
             let mounts = parse_mountinfo(&snapshot)?;
+            let paths: Vec<Vec<u8>> = endpoints
+                .iter()
+                .map(|endpoint| get_kernel_path(endpoint))
+                .collect::<Result<_, _>>()?;
             let origins: Vec<Vec<Vec<u8>>> = endpoints
                 .iter()
                 .map(|endpoint| get_origin(endpoint, &mounts))
                 .collect::<Result<_, _>>()?;
-            (snapshot, origins)
+            for (endpoint, path) in endpoints.iter().zip(&paths) {
+                if get_kernel_path(endpoint)? != *path {
+                    return Err(EndpointError::IDENTITY_CHANGED);
+                }
+            }
+            (snapshot, origins, paths)
         };
         for (index, left) in endpoints.iter().enumerate() {
             for (offset, right) in endpoints[index + 1..].iter().enumerate() {
@@ -561,6 +873,12 @@ mod unix {
         if read_mountinfo()? != mount_snapshot {
             return Err(EndpointError::IDENTITY_CHANGED);
         }
+        #[cfg(target_os = "linux")]
+        for (endpoint, path) in endpoints.iter().zip(&kernel_paths) {
+            if get_kernel_path(endpoint)? != *path {
+                return Err(EndpointError::IDENTITY_CHANGED);
+            }
+        }
         let scopes = endpoints
             .iter()
             .map(|endpoint| {
@@ -580,6 +898,32 @@ mod unix {
     mod tests {
         use super::{decode_mount_path, get_mount_origin, parse_mountinfo};
         use crate::local_endpoint::EndpointError;
+
+        #[test]
+        fn origin_uses_kernel_fd_path_not_cached_spelling() {
+            use std::os::unix::fs::MetadataExt;
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("actual_name");
+            std::fs::create_dir(&path).unwrap();
+            let metadata = std::fs::metadata(&path).unwrap();
+            let mut endpoint = super::LocalEndpoint::resolve(
+                &path,
+                super::FileIdentity {
+                    device: metadata.dev(),
+                    inode: metadata.ino(),
+                },
+            )
+            .unwrap();
+            let mounts = super::parse_mountinfo(&super::read_mountinfo().unwrap()).unwrap();
+            let before = match super::get_origin(&endpoint, &mounts) {
+                Ok(origin) => origin,
+                Err(super::EndpointError::AMBIGUOUS_SCOPE) => return,
+                Err(error) => panic!("unexpected origin error: {error}"),
+            };
+            *endpoint.names.last_mut().unwrap() =
+                std::ffi::CString::new("different_spelling").unwrap();
+            assert_eq!(super::get_origin(&endpoint, &mounts).unwrap(), before);
+        }
 
         #[test]
         fn mount_parser_decodes_kernel_escapes_and_rejects_bad_input() {
@@ -622,6 +966,11 @@ mod unix {
 
 #[cfg(unix)]
 pub use unix::{LocalEndpoint, get_disjoint_scope_evidence};
+#[cfg(target_os = "linux")]
+pub use unix::{
+    PhysicalScopeObservation, compare_physical_scope_observations, get_physical_scope_observation,
+    validate_physical_scope_observation,
+};
 
 #[cfg(not(unix))]
 pub struct LocalEndpoint;

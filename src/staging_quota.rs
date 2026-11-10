@@ -39,6 +39,26 @@ pub fn reserve_owned_staging_quota(
     {
         return Err(StateError::InvalidInput);
     }
+    #[cfg(target_os = "linux")]
+    if binding.object_kind != "gateway_scratch" {
+        use crate::physical_registry::{
+            PhysicalRegistryError, PhysicalRootClaim, PhysicalRootKind,
+        };
+        crate::physical_registry::register_roots(
+            state,
+            &[PhysicalRootClaim {
+                kind: PhysicalRootKind::STAGING,
+                owner_id: &binding.storage_endpoint_id,
+                endpoint,
+            }],
+            &crate::resources::StageGuard::default(),
+        )
+        .map_err(|error| match error {
+            PhysicalRegistryError::INVENTORY_REQUIRED => StateError::InventoryRequired,
+            PhysicalRegistryError::LIMIT => StateError::QuotaExceeded,
+            _ => StateError::EffectConflict,
+        })?;
+    }
     if !state.has_staging_quota_storage(&binding.storage_identity)? && !is_empty(endpoint)? {
         state.require_staging_quota_inventory()?;
         return Err(StateError::EffectConflict);

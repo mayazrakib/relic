@@ -166,7 +166,7 @@ impl LocalGatewayStore {
             .get_gateway_resource(id)
             .map_err(|_| GatewayStoreError::STATE)?
             .ok_or(GatewayStoreError::STATE)?;
-        self.validate_execution(state, &resource, context)?;
+        self.validate_execution(state, &resource, context, false)?;
         let coordinator = self.acquire_coordinator(false)?;
         let layout = state
             .get_gateway_layout(id)
@@ -263,7 +263,7 @@ impl LocalGatewayStore {
             .get_gateway_resource(id)
             .map_err(|_| GatewayStoreError::STATE)?
             .ok_or(GatewayStoreError::STATE)?;
-        self.validate_execution(state, &resource, context)?;
+        self.validate_execution(state, &resource, context, true)?;
         let coordinator = self.acquire_coordinator(false)?;
         let layout = state
             .get_gateway_layout(id)
@@ -413,7 +413,9 @@ impl LocalGatewayStore {
             }
             let mut input = Zeroizing::new((body.len() as u32).to_be_bytes().to_vec());
             input.extend_from_slice(&body);
-            let mut reads = vec![context.state_dir.to_path_buf(), self.root.clone()];
+            let mut reads = crate::worker_state::get_readonly_state_paths(state, context.state_dir)
+                .map_err(|_| GatewayStoreError::STATE)?;
+            reads.push(self.root.clone());
             if let Some(source) = source {
                 reads.push(
                     source

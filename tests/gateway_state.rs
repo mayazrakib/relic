@@ -511,7 +511,7 @@ fn schema_eight_migration_preserves_existing_capture() {
     create_capture(&mut store);
     drop(store);
     let connection = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
-    connection.execute_batch("DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version = 8;").unwrap();
+    connection.execute_batch("DROP TABLE physical_roots; DROP TABLE physical_registry_meta; DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version = 8;").unwrap();
     drop(connection);
     let store = StateStore::open(&path).unwrap();
     assert_eq!(

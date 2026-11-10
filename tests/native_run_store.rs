@@ -299,6 +299,8 @@ fn rejects_replaced_owner_and_extra_layout_entries() {
 
 #[test]
 fn reconciles_recorded_staging_without_running_a_worker() {
+    use relic::physical_registry::{PhysicalRootClaim, PhysicalRootKind, register_roots};
+
     let directory = get_private_directory();
     let root = fs::canonicalize(directory.path()).unwrap();
     let native = root.join("native");
@@ -309,8 +311,26 @@ fn reconciles_recorded_staging_without_running_a_worker() {
     create_sealed_stage(&mut state);
     let store = create_store(&native);
     let binding = get_binding(&store, "run_1");
-    state.prepare_native_run(&binding).unwrap();
     let metadata = fs::metadata(&native).unwrap();
+    let endpoint = LocalEndpoint::resolve(
+        &native,
+        FileIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        },
+    )
+    .unwrap();
+    register_roots(
+        &mut state,
+        &[PhysicalRootClaim {
+            kind: PhysicalRootKind::STAGING,
+            owner_id: &binding.storage_endpoint_id,
+            endpoint: &endpoint,
+        }],
+        &StageGuard::default(),
+    )
+    .unwrap();
+    state.prepare_native_run(&binding).unwrap();
     state
         .reserve_staging_quota(
             &relic::staging_quota::StagingQuotaBinding {
@@ -387,7 +407,10 @@ fn retains_fence_and_budget_until_unreaped_worker_is_proved_stopped() {
     store
         .prepare(&mut state, &binding, &StageGuard::default())
         .unwrap();
-    let script = root.join("worker.py");
+    let scripts = root.join("worker_scripts");
+    fs::create_dir(&scripts).unwrap();
+    fs::set_permissions(&scripts, fs::Permissions::from_mode(0o700)).unwrap();
+    let script = scripts.join("worker.py");
     fs::write(&script, "#!/usr/bin/python3\nimport json,sys,time\nfrom pathlib import Path\nraw=sys.stdin.buffer.read()\nassert len(raw)>=4 and int.from_bytes(raw[:4],'big')==len(raw)-4\nrequest=json.loads(raw[4:])\nmember=next(line[3:] for line in Path('/proc/self/cgroup').read_text().splitlines() if line.startswith('0::'))\n(Path(request['scratch_dir'])/'membership').write_text(member)\ntime.sleep(15)\n").unwrap();
     fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
     let marker = native.join("native_run_1/scratch/membership");
@@ -545,6 +568,7 @@ fn legacy_unrecorded_running_and_unknown_runs_require_reconciliation() {
 #[test]
 #[ignore = "requires verified delegated Linux cgroup development guard with Landlock"]
 fn reconciliation_quiesces_recorded_orphan_before_owner_probe() {
+    use relic::physical_registry::{PhysicalRootClaim, PhysicalRootKind, register_roots};
     use relic::worker_runtime::execute_worker_recorded;
     use std::sync::mpsc;
     use std::time::Instant;
@@ -562,6 +586,27 @@ fn reconciliation_quiesces_recorded_orphan_before_owner_probe() {
     store
         .prepare(&mut state, &get_binding(&store, "run_1"), &guard)
         .unwrap();
+    let executable = fs::canonicalize(env!("CARGO_BIN_EXE_relic-worker")).unwrap();
+    let parent = executable.parent().unwrap();
+    let metadata = fs::metadata(parent).unwrap();
+    let endpoint = LocalEndpoint::resolve(
+        parent,
+        FileIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        },
+    )
+    .unwrap();
+    register_roots(
+        &mut state,
+        &[PhysicalRootClaim {
+            kind: PhysicalRootKind::EXECUTABLE,
+            owner_id: "archive_worker_binary",
+            endpoint: &endpoint,
+        }],
+        &guard,
+    )
+    .unwrap();
     let started = state.start_native_run("run_1", "create").unwrap();
     assert_eq!(started.operation_token.as_deref(), Some("create:1"));
     let container = native.join("native_run_1");

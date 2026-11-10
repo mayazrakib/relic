@@ -522,6 +522,28 @@ mod unix {
             &self.identity
         }
 
+        fn check_physical_root(
+            &self,
+            state: &StateStore,
+            binding: &RestoreBinding,
+            guard: &StageGuard,
+        ) -> Result<(), RestoreStoreError> {
+            #[cfg(target_os = "linux")]
+            crate::physical_registry::check_registered_roots(
+                state,
+                &[crate::physical_registry::PhysicalRootClaim {
+                    kind: crate::physical_registry::PhysicalRootKind::RESTORE,
+                    owner_id: &binding.target_endpoint_id,
+                    endpoint: &self.endpoint,
+                }],
+                guard,
+            )
+            .map_err(|_| RestoreStoreError::RECONCILIATION_REQUIRED)?;
+            #[cfg(not(target_os = "linux"))]
+            let _ = (state, binding, guard);
+            Ok(())
+        }
+
         fn check_binding(&self, binding: &RestoreBinding) -> Result<(), RestoreStoreError> {
             self.endpoint
                 .revalidate()
@@ -591,6 +613,17 @@ mod unix {
         ) -> Result<RestoreStage<'a>, RestoreStoreError> {
             check_limits(limits)?;
             self.check_binding(binding)?;
+            #[cfg(target_os = "linux")]
+            crate::physical_registry::register_roots(
+                state,
+                &[crate::physical_registry::PhysicalRootClaim {
+                    kind: crate::physical_registry::PhysicalRootKind::RESTORE,
+                    owner_id: &binding.target_endpoint_id,
+                    endpoint: &self.endpoint,
+                }],
+                guard,
+            )
+            .map_err(|_| RestoreStoreError::RECONCILIATION_REQUIRED)?;
             let record = state.prepare_restore(binding)?;
             let lock = self.acquire_lock(&binding.restore_id, guard)?;
             let expected = get_expected(&record, limits)?;
@@ -717,6 +750,7 @@ mod unix {
                 }
 
                 self.check_stage(stage)?;
+                self.check_physical_root(state, &stage.binding, &stage.guard)?;
                 let record = state
                     .get_restore(&stage.binding.restore_id)?
                     .ok_or(RestoreStoreError::INVALID)?;
@@ -762,6 +796,7 @@ mod unix {
             }
 
             self.check_stage(&stage)?;
+            self.check_physical_root(state, &stage.binding, &stage.guard)?;
             let record = state
                 .get_restore(&stage.binding.restore_id)?
                 .ok_or(RestoreStoreError::INVALID)?;
@@ -874,6 +909,7 @@ mod unix {
                 .get_restore(restore_id)?
                 .ok_or(RestoreStoreError::INVALID)?;
             self.check_binding(&record.binding)?;
+            self.check_physical_root(state, &record.binding, guard)?;
             let lock = self.acquire_lock(restore_id, guard)?;
             let record = state
                 .get_restore(restore_id)?

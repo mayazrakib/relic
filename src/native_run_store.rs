@@ -455,8 +455,38 @@ impl NativeRunStore {
         &self,
         state: &mut StateStore,
         record: &NativeRunRecord,
+        is_recovery: bool,
     ) -> Result<(), NativeRunError> {
         self.validate_record(record)?;
+        if is_recovery {
+            crate::physical_registry::check_registered_access(
+                state,
+                crate::physical_registry::PhysicalRootKind::STAGING,
+                &record.binding.storage_endpoint_id,
+                &self.endpoint,
+                &StageGuard::default(),
+            )
+            .map_err(|_| NativeRunError::RECONCILIATION_REQUIRED)?;
+            let saved = state
+                .get_staging_quota("native_run", &record.binding.run_id)
+                .map_err(|_| NativeRunError::STATE)?
+                .ok_or(NativeRunError::RECONCILIATION_REQUIRED)?;
+            if !state
+                .is_staging_quota_inventory_complete()
+                .map_err(|_| NativeRunError::STATE)?
+                || saved.binding.storage_endpoint_id != record.binding.storage_endpoint_id
+                || saved.binding.storage_identity != record.binding.storage_identity
+                || saved.binding.volume_identity
+                    != format!("unix:{}", self.endpoint.identity().device)
+                || saved.binding.max_bytes
+                    != get_repository_budget(record)?
+                        .checked_add(SCRATCH_BYTES)
+                        .ok_or(NativeRunError::CAPACITY)?
+            {
+                return Err(NativeRunError::RECONCILIATION_REQUIRED);
+            }
+            return Ok(());
+        }
         crate::staging_quota::reserve_owned_staging_quota(
             state,
             &self.endpoint,
@@ -500,7 +530,7 @@ impl NativeRunStore {
             .prepare_native_run(binding)
             .map_err(|_| NativeRunError::STATE)?;
         self.validate_record(&record)?;
-        self.reserve_quota(state, &record)?;
+        self.reserve_quota(state, &record, false)?;
         let lock = self.acquire_parent_lock(&record)?;
         let record = state
             .get_native_run(&binding.run_id)
@@ -621,7 +651,7 @@ impl NativeRunStore {
             .get_native_run(run_id)
             .map_err(|_| NativeRunError::STATE)?
             .ok_or(NativeRunError::STATE)?;
-        self.reserve_quota(state, &record)?;
+        self.reserve_quota(state, &record, true)?;
         let lock = self.acquire_parent_lock(&record)?;
         record = state
             .get_native_run(run_id)
@@ -712,6 +742,56 @@ impl NativeRunStore {
         {
             return Err(NativeRunError::INVALID);
         }
+        let executable =
+            fs::canonicalize(execution.executable).map_err(|_| NativeRunError::INVALID)?;
+        let executable_parent = executable.parent().ok_or(NativeRunError::INVALID)?;
+        let metadata = fs::metadata(executable_parent).map_err(|_| NativeRunError::STORAGE)?;
+        let executable_endpoint = LocalEndpoint::resolve(
+            executable_parent,
+            crate::local_endpoint::FileIdentity {
+                device: metadata.dev(),
+                inode: metadata.ino(),
+            },
+        )
+        .map_err(|_| NativeRunError::STORAGE)?;
+        if operation == ArchiveWorkerOperation::VERIFY {
+            crate::physical_registry::check_registered_access(
+                state,
+                crate::physical_registry::PhysicalRootKind::EXECUTABLE,
+                "archive_worker_binary",
+                &executable_endpoint,
+                execution.guard,
+            )
+            .map_err(|_| NativeRunError::RECONCILIATION_REQUIRED)?;
+            let metadata = fs::metadata(&state_path).map_err(|_| NativeRunError::STORAGE)?;
+            let state_endpoint = LocalEndpoint::resolve_metadata(
+                &state_path,
+                crate::local_endpoint::FileIdentity {
+                    device: metadata.dev(),
+                    inode: metadata.ino(),
+                },
+            )
+            .map_err(|_| NativeRunError::STORAGE)?;
+            crate::physical_registry::check_registered_access(
+                state,
+                crate::physical_registry::PhysicalRootKind::STATE,
+                "node",
+                &state_endpoint,
+                execution.guard,
+            )
+            .map_err(|_| NativeRunError::RECONCILIATION_REQUIRED)?;
+        } else {
+            crate::physical_registry::register_roots(
+                state,
+                &[crate::physical_registry::PhysicalRootClaim {
+                    kind: crate::physical_registry::PhysicalRootKind::EXECUTABLE,
+                    owner_id: "archive_worker_binary",
+                    endpoint: &executable_endpoint,
+                }],
+                execution.guard,
+            )
+            .map_err(|_| NativeRunError::RECONCILIATION_REQUIRED)?;
+        }
         let capture = state
             .get_capture(&record.capture_id)
             .map_err(|_| NativeRunError::STATE)?
@@ -731,7 +811,7 @@ impl NativeRunStore {
         }
         let layout = self.open_layout(record)?;
         let repository_max_bytes = get_repository_budget(record)?;
-        self.reserve_quota(state, record)?;
+        self.reserve_quota(state, record, operation == ArchiveWorkerOperation::VERIFY)?;
         let spool_bytes = repository_max_bytes
             .checked_add(SCRATCH_BYTES)
             .ok_or(NativeRunError::CAPACITY)?;
@@ -825,7 +905,10 @@ impl NativeRunStore {
             }
             let mut input = Zeroizing::new((body.len() as u32).to_be_bytes().to_vec());
             input.extend_from_slice(&body);
-            let mut read_paths = vec![execution.state_dir.to_path_buf(), container_path];
+            let mut read_paths =
+                crate::worker_state::get_readonly_state_paths(state, execution.state_dir)
+                    .map_err(|_| NativeRunError::STATE)?;
+            read_paths.push(container_path);
             let mut write_paths = vec![scratch_dir];
             if operation == ArchiveWorkerOperation::CREATE {
                 read_paths.push(execution.archive_dir.to_path_buf());

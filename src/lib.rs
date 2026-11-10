@@ -33,6 +33,8 @@ pub mod manifest_spool;
 #[cfg(all(feature = "embedded-archive", target_os = "linux"))]
 pub mod native_run_store;
 pub mod payload_capture;
+#[cfg(target_os = "linux")]
+pub mod physical_registry;
 pub mod planner;
 pub mod resources;
 pub mod restore;
@@ -44,6 +46,7 @@ pub mod staging_quota;
 pub mod state;
 pub mod worker_identity;
 pub mod worker_runtime;
+pub mod worker_state;
 
 #[cfg(target_os = "linux")]
 mod worker_sandbox;

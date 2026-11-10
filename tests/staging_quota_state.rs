@@ -160,7 +160,7 @@ fn migration_blocks_until_trusted_inventory_is_complete() {
     let connection = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version = 7;",
+            "DROP TABLE physical_roots; DROP TABLE physical_registry_meta; DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);

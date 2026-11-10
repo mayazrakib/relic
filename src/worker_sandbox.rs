@@ -259,10 +259,12 @@ impl WorkerSandbox {
             let file = open_path(path)?;
             let metadata = file.metadata()?;
             // SAFETY: geteuid reads only the current process identity.
-            if !metadata.is_dir()
-                || metadata.uid() != unsafe { libc::geteuid() }
-                || metadata.mode() & 0o7777 != 0o700
-            {
+            let is_directory = metadata.is_dir() && metadata.mode() & 0o7777 == 0o700;
+            let is_read_file = access == READ_ACCESS
+                && metadata.is_file()
+                && metadata.mode() & 0o7777 == 0o600
+                && metadata.nlink() == 1;
+            if (!is_directory && !is_read_file) || metadata.uid() != unsafe { libc::geteuid() } {
                 return Err(get_error());
             }
             let mut info = std::mem::MaybeUninit::<libc::statfs>::uninit();
