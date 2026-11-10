@@ -272,6 +272,15 @@ impl Fixture {
         stage_id: &str,
         guard: &StageGuard,
     ) -> Result<DiskArchiveSource, ArchiveDiskError> {
+        self.create_source_with_limits(stage_id, get_disk_limits(), guard)
+    }
+
+    fn create_source_with_limits(
+        &mut self,
+        stage_id: &str,
+        limits: ArchiveDiskLimits,
+        guard: &StageGuard,
+    ) -> Result<DiskArchiveSource, ArchiveDiskError> {
         let runs = self
             .root
             .join(format!("verify_{}", uuid::Uuid::now_v7().simple()));
@@ -291,7 +300,7 @@ impl Fixture {
             ArchiveDiskRequest {
                 binding: &binding,
                 key: &self.key,
-                limits: get_disk_limits(),
+                limits,
                 guard,
             },
             &self.job,
@@ -911,4 +920,64 @@ fn contained_worker_verifies_native_snapshot_and_independent_recovery() {
         fs::read(restored.join("sources/documents/folder/nested")).unwrap(),
         b"nested content"
     );
+    let held_quota = fixture.state.get_staging_quota_usage().unwrap();
+    let retained = native_root.join("native_run_1/scratch/interrupted_sort");
+    let file = File::create(&retained).unwrap();
+    file.set_len(8 * 1024 * 1024 - 1).unwrap();
+    fs::set_permissions(&retained, fs::Permissions::from_mode(0o600)).unwrap();
+    file.sync_all().unwrap();
+    drop(file);
+    assert!(matches!(
+        store.reconcile(&mut fixture.state, "run_1", &execution),
+        Err(relic::native_run_store::NativeRunError::OUTCOME_UNKNOWN)
+    ));
+    let uncertain = fixture.state.get_native_run("run_1").unwrap().unwrap();
+    assert_eq!(uncertain.effect_state, "unknown");
+    assert_eq!(
+        uncertain.native_snapshot_id.as_deref(),
+        Some(snapshot_id.as_str())
+    );
+    assert_eq!(uncertain.creation_attempts, 1);
+    assert_eq!(uncertain.verification_failures, 1);
+    assert_eq!(fixture.state.get_staging_quota_usage().unwrap(), held_quota);
+    assert_eq!(fs::metadata(&retained).unwrap().len(), 8 * 1024 * 1024 - 1);
+}
+
+#[test]
+fn persists_combined_capture_and_source_quota_after_leases_end() {
+    let mut fixture = Fixture::create(1024);
+    let guard = StageGuard::default();
+    let initial = fixture.state.get_staging_quota_usage().unwrap();
+    assert_eq!(initial, 128 * 1024 * 1024);
+    let limits = ArchiveDiskLimits {
+        max_ciphertext_bytes: 256 * 1024 * 1024,
+        ..get_disk_limits()
+    };
+    for index in 1..=3 {
+        drop(
+            fixture
+                .create_source_with_limits(&format!("stage_{index}"), limits, &guard)
+                .unwrap(),
+        );
+    }
+    let held = fixture.state.get_staging_quota_usage().unwrap();
+    assert_eq!(held, initial + 3 * (258 * 1024 * 1024));
+    assert_eq!(fixture.pool.usage().unwrap().0.spool_bytes, 0);
+    let reopened = StateStore::open(&fixture.root.join("state")).unwrap();
+    assert_eq!(reopened.get_staging_quota_usage().unwrap(), held);
+    assert!(
+        fixture
+            .create_source_with_limits("stage_4", limits, &guard)
+            .is_err()
+    );
+    assert_eq!(fixture.state.get_staging_quota_usage().unwrap(), held);
+    assert!(
+        fixture
+            .state
+            .list_archive_files("stage_4", "", 1)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!fixture.root.join("disk/archive_stage_4.catalog").exists());
+    assert!(!fixture.root.join("disk/.archive_stage_4.lock").exists());
 }

@@ -419,6 +419,33 @@ mod unix {
             .map(PayloadStage)
         }
 
+        fn reserve_quota(
+            &self,
+            state: &mut StateStore,
+            binding: &ManifestArtifactBinding,
+            kind: ArtifactKind,
+            limits: SpoolLimits,
+        ) -> Result<(), ArtifactStoreError> {
+            self.check_binding(binding, kind)?;
+            crate::staging_quota::reserve_owned_staging_quota(
+                state,
+                &self.endpoint,
+                &crate::staging_quota::StagingQuotaBinding {
+                    object_kind: match kind {
+                        ArtifactKind::MANIFEST => "manifest",
+                        ArtifactKind::PAYLOAD => "payload",
+                    }
+                    .into(),
+                    object_id: binding.artifact_id.clone(),
+                    storage_endpoint_id: binding.storage_endpoint_id.clone(),
+                    storage_identity: binding.storage_identity.clone(),
+                    volume_identity: format!("unix:{}", self.endpoint.identity().device),
+                    max_bytes: limits.ciphertext_bytes,
+                },
+            )?;
+            Ok(())
+        }
+
         fn begin_stage<'a>(
             &'a self,
             state: &mut StateStore,
@@ -427,12 +454,12 @@ mod unix {
             limits: SpoolLimits,
             guard: &StageGuard,
         ) -> Result<ArtifactStage<'a>, ArtifactStoreError> {
+            guard.check().map_err(ArtifactStoreError::RESOURCE)?;
             check_limits(limits)?;
             self.check_binding(binding, kind)?;
             state
                 .get_capture(&binding.capture_id)?
                 .ok_or(ArtifactStoreError::INVALID)?;
-            let lock = self.acquire_lock(&binding.capture_id, kind, guard)?;
             let capacity = self
                 .endpoint
                 .capacity()
@@ -455,6 +482,8 @@ mod unix {
                         .effect_state
                 }
             };
+            self.reserve_quota(state, binding, kind, limits)?;
+            let lock = self.acquire_lock(&binding.capture_id, kind, guard)?;
             let pending = kind.get_pending_name(&binding.artifact_id);
 
             if effect_state != "prepared"
@@ -837,6 +866,7 @@ mod unix {
             verification: &mut PayloadVerification<'_>,
             guard: &StageGuard,
         ) -> Result<PayloadArtifactRecord, ArtifactStoreError> {
+            guard.check().map_err(ArtifactStoreError::RESOURCE)?;
             check_limits(verification.limits.spool)?;
             let record = state
                 .get_payload_artifact(artifact_id)?
@@ -848,6 +878,12 @@ mod unix {
                 return Err(ArtifactStoreError::WRONG_KEY_REFERENCE);
             }
 
+            self.reserve_quota(
+                state,
+                &location,
+                ArtifactKind::PAYLOAD,
+                verification.limits.spool,
+            )?;
             let _lock =
                 self.acquire_lock(&record.binding.capture_id, ArtifactKind::PAYLOAD, guard)?;
             let record = state
@@ -946,6 +982,7 @@ mod unix {
             limits: SpoolLimits,
             guard: &StageGuard,
         ) -> Result<ManifestArtifactRecord, ArtifactStoreError> {
+            guard.check().map_err(ArtifactStoreError::RESOURCE)?;
             check_limits(limits)?;
             let record = state
                 .get_manifest_artifact(artifact_id)?
@@ -956,6 +993,7 @@ mod unix {
                 return Err(ArtifactStoreError::WRONG_KEY_REFERENCE);
             }
 
+            self.reserve_quota(state, &record.binding, ArtifactKind::MANIFEST, limits)?;
             let _lock =
                 self.acquire_lock(&record.binding.capture_id, ArtifactKind::MANIFEST, guard)?;
 

@@ -265,7 +265,7 @@ fn paginates_pending_and_migrates_schema_six() {
     drop(store);
     let connection = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
     connection
-        .execute_batch("DROP TABLE native_runs; PRAGMA user_version = 6;")
+        .execute_batch("DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; DROP TABLE native_runs; PRAGMA user_version = 6;")
         .unwrap();
     drop(connection);
     let store = StateStore::open(&path).unwrap();

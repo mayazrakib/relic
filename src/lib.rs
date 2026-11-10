@@ -32,6 +32,7 @@ pub mod restore_store;
 pub mod scheduler;
 pub mod service;
 pub mod source_scan;
+pub mod staging_quota;
 pub mod state;
 pub mod worker_runtime;
 

@@ -798,6 +798,11 @@ mod linux {
                 &guard,
             )
             .map_err(|_| WorkerProtocolError::RESOURCE)?;
+        let retained_scratch_bytes = sync_repository(&scratch_endpoint, 8 * 1024 * 1024, &guard)?;
+        let available_scratch_bytes = (8 * 1024 * 1024u64)
+            .checked_sub(retained_scratch_bytes)
+            .filter(|bytes| *bytes > 0)
+            .ok_or(WorkerProtocolError::RESOURCE)?;
         let scratch = create_scratch(&scratch_endpoint, &request.scratch_dir)?;
         let mut sorter_key = Zeroizing::new([0; 32]);
         getrandom::fill(sorter_key.as_mut()).map_err(|_| WorkerProtocolError::RESOURCE)?;
@@ -811,7 +816,7 @@ mod linux {
                 max_chunk_entries: 64,
                 max_runs: 64,
                 max_fan_in: 4,
-                max_cipher_bytes: 8 * 1024 * 1024,
+                max_cipher_bytes: available_scratch_bytes,
                 max_memory_bytes: 8 * 1024 * 1024,
             },
             &guard,

@@ -9,8 +9,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::staging_quota::{
+    MAX_STAGING_BYTES, MAX_STAGING_OBJECTS, MIN_FREE_BYTES, StagingQuotaBinding, StagingQuotaRecord,
+};
+
 const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
-const CURRENT_SCHEMA_VERSION: u32 = 7;
+const CURRENT_SCHEMA_VERSION: u32 = 8;
 
 #[derive(Debug)]
 pub enum StateError {
@@ -23,6 +27,8 @@ pub enum StateError {
     EffectConflict,
     UnsupportedVersion,
     InsecureDirectory,
+    QuotaExceeded,
+    InventoryRequired,
 }
 
 impl fmt::Display for StateError {
@@ -36,6 +42,8 @@ impl fmt::Display for StateError {
             Self::IdempotencyConflict => "The commit key is already bound to another payload.",
             Self::EffectConflict => "The effect transition requires reconciliation.",
             Self::UnsupportedVersion => "The state database requires a different schema version.",
+            Self::QuotaExceeded => "The staging quota or free-space reserve is exhausted.",
+            Self::InventoryRequired => "The staging quota inventory is incomplete.",
             Self::InsecureDirectory => {
                 "The state directory must be private and must not be a symbolic link."
             }
@@ -558,6 +566,12 @@ impl StateStore {
         if version <= 6 {
             transaction
                 .execute_batch(include_str!("../database/migrations/00007_native_runs.sql"))?;
+        }
+
+        if version <= 7 {
+            transaction.execute_batch(include_str!(
+                "../database/migrations/00008_staging_quota.sql"
+            ))?;
         }
 
         transaction.commit()?;
@@ -1951,6 +1965,219 @@ impl StateStore {
             .ok_or(StateError::EffectConflict)
     }
 
+    pub fn require_staging_quota_inventory(&mut self) -> Result<(), StateError> {
+        self.connection.execute(
+            "UPDATE staging_quota_metadata SET inventory_complete = 0 WHERE singleton = 1",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn is_staging_quota_inventory_complete(&self) -> Result<bool, StateError> {
+        self.connection
+            .query_row(
+                "SELECT inventory_complete FROM staging_quota_metadata WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(StateError::from)
+    }
+
+    pub fn has_staging_quota_storage(&self, identity: &str) -> Result<bool, StateError> {
+        let mut components = identity.split(':');
+        if components.next() != Some("unix")
+            || components
+                .next()
+                .is_none_or(|value| parse_archive_counter(value).is_err())
+            || components
+                .next()
+                .is_none_or(|value| parse_archive_counter(value).is_err())
+            || components.next().is_some()
+        {
+            return Err(StateError::InvalidInput);
+        }
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM staging_quota WHERE storage_identity = ?1)",
+                [identity],
+                |row| row.get(0),
+            )
+            .map_err(StateError::from)
+    }
+
+    pub fn get_staging_quota(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<Option<StagingQuotaRecord>, StateError> {
+        if !valid_staging_kind(kind) || !valid_identifier_text(id) {
+            return Err(StateError::InvalidInput);
+        }
+        read_staging_quota(&self.connection, kind, id)
+    }
+
+    pub fn list_staging_quota(
+        &self,
+        after_kind: &str,
+        after_id: &str,
+        limit: u32,
+    ) -> Result<Vec<StagingQuotaRecord>, StateError> {
+        if !(1..=1000).contains(&limit)
+            || ((!after_kind.is_empty() || !after_id.is_empty())
+                && (!valid_staging_kind(after_kind) || !valid_identifier_text(after_id)))
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let mut statement = self.connection.prepare("SELECT object_kind, object_id FROM staging_quota WHERE (object_kind, object_id) > (?1, ?2) ORDER BY object_kind, object_id LIMIT ?3")?;
+        let rows = statement.query_map(params![after_kind, after_id, limit], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            let (kind, id) = row?;
+            result.push(
+                self.get_staging_quota(&kind, &id)?
+                    .ok_or(StateError::EffectConflict)?,
+            );
+        }
+        Ok(result)
+    }
+
+    pub fn get_staging_quota_usage(&self) -> Result<u64, StateError> {
+        get_staging_totals(&self.connection, None).map(|value| value.0)
+    }
+
+    pub fn reserve_staging_quota(
+        &mut self,
+        binding: &StagingQuotaBinding,
+        capacity_bytes: u64,
+        available_bytes: u64,
+    ) -> Result<StagingQuotaRecord, StateError> {
+        self.insert_staging_quota(binding, capacity_bytes, available_bytes, false)
+    }
+
+    /// Records externally verified legacy ownership while the inventory gate remains closed.
+    pub fn record_staging_quota_inventory(
+        &mut self,
+        binding: &StagingQuotaBinding,
+        capacity_bytes: u64,
+        available_bytes: u64,
+    ) -> Result<StagingQuotaRecord, StateError> {
+        self.insert_staging_quota(binding, capacity_bytes, available_bytes, true)
+    }
+
+    fn insert_staging_quota(
+        &mut self,
+        binding: &StagingQuotaBinding,
+        capacity_bytes: u64,
+        available_bytes: u64,
+        is_inventory: bool,
+    ) -> Result<StagingQuotaRecord, StateError> {
+        validate_staging_quota(binding)?;
+        if capacity_bytes == 0 || available_bytes > capacity_bytes {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let inventory_complete: bool = transaction.query_row(
+            "SELECT inventory_complete FROM staging_quota_metadata WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        let existing = read_staging_quota(&transaction, &binding.object_kind, &binding.object_id)?;
+        if existing
+            .as_ref()
+            .is_some_and(|record| record.binding != *binding)
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
+        if !is_inventory && !inventory_complete {
+            return Err(StateError::InventoryRequired);
+        }
+        if is_inventory && inventory_complete && existing.is_none() {
+            return Err(StateError::EffectConflict);
+        }
+        let (endpoint, identity) =
+            get_staging_owner(&transaction, &binding.object_kind, &binding.object_id)?
+                .ok_or(StateError::EffectConflict)?;
+        if endpoint != binding.storage_endpoint_id || identity != binding.storage_identity {
+            return Err(StateError::IdempotencyConflict);
+        }
+        let (total, count) = get_staging_totals(&transaction, None)?;
+        if existing.is_none() && count >= MAX_STAGING_OBJECTS {
+            return Err(StateError::QuotaExceeded);
+        }
+        let additional = if existing.is_some() {
+            0
+        } else {
+            binding.max_bytes
+        };
+        let new_total = total
+            .checked_add(additional)
+            .ok_or(StateError::QuotaExceeded)?;
+        if !is_inventory {
+            if new_total > MAX_STAGING_BYTES {
+                return Err(StateError::QuotaExceeded);
+            }
+            let (volume_total, _) =
+                get_staging_totals(&transaction, Some(&binding.volume_identity))?;
+            let volume_total = volume_total
+                .checked_add(additional)
+                .ok_or(StateError::QuotaExceeded)?;
+            let reserve = MIN_FREE_BYTES.max(capacity_bytes.div_ceil(20));
+            if volume_total
+                .checked_add(reserve)
+                .is_none_or(|required| required > available_bytes)
+            {
+                return Err(StateError::QuotaExceeded);
+            }
+        }
+        if let Some(existing) = existing {
+            transaction.commit()?;
+            return Ok(existing);
+        }
+        transaction.execute("INSERT INTO staging_quota (object_kind, object_id, storage_endpoint_id, storage_identity, volume_identity, max_bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![binding.object_kind, binding.object_id, binding.storage_endpoint_id, binding.storage_identity, binding.volume_identity, i64::try_from(binding.max_bytes).map_err(|_| StateError::InvalidInput)?])?;
+        transaction.commit()?;
+        Ok(StagingQuotaRecord {
+            binding: binding.clone(),
+        })
+    }
+
+    /// The caller must verify physical inventory and unknown files before opening this gate.
+    pub fn mark_staging_quota_inventory_complete(&mut self) -> Result<(), StateError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let missing: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM manifest_artifacts m WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'manifest' AND q.object_id = m.artifact_id AND q.storage_endpoint_id = m.storage_endpoint_id AND q.storage_identity = m.storage_identity)) OR EXISTS(SELECT 1 FROM payload_artifacts p WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'payload' AND q.object_id = p.artifact_id AND q.storage_endpoint_id = p.storage_endpoint_id AND q.storage_identity = p.storage_identity)) OR EXISTS(SELECT 1 FROM archive_stages a WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'archive_stage' AND q.object_id = a.stage_id AND q.storage_endpoint_id = a.storage_endpoint_id AND q.storage_identity = a.storage_identity)) OR EXISTS(SELECT 1 FROM native_runs n WHERE NOT EXISTS (SELECT 1 FROM staging_quota q WHERE q.object_kind = 'native_run' AND q.object_id = n.run_id AND q.storage_endpoint_id = n.storage_endpoint_id AND q.storage_identity = n.storage_identity))",
+            [], |row| row.get(0),
+        )?;
+        if missing {
+            return Err(StateError::InventoryRequired);
+        }
+        {
+            let mut statement = transaction
+                .prepare("SELECT object_kind, object_id, max_bytes FROM staging_quota")?;
+            let mut rows = statement.query([])?;
+            while let Some(row) = rows.next()? {
+                let kind: String = row.get(0)?;
+                let id: String = row.get(1)?;
+                let charged =
+                    u64::try_from(row.get::<_, i64>(2)?).map_err(|_| StateError::InvalidInput)?;
+                if get_staging_persisted_bytes(&transaction, &kind, &id)? > charged {
+                    return Err(StateError::InventoryRequired);
+                }
+            }
+        }
+        transaction.execute(
+            "UPDATE staging_quota_metadata SET inventory_complete = 1 WHERE singleton = 1",
+            [],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn bind_publication(&mut self, binding: &Value) -> Result<PublicationRecord, StateError> {
         validate_publication_binding(binding)?;
         let key = binding.get("commit_key").ok_or(StateError::InvalidInput)?;
@@ -2374,4 +2601,143 @@ fn read_native_run(
             Ok(value)
         })
         .transpose()
+}
+
+fn valid_staging_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "manifest" | "payload" | "archive_stage" | "native_run"
+    )
+}
+
+fn validate_staging_quota(binding: &StagingQuotaBinding) -> Result<(), StateError> {
+    if !valid_staging_kind(&binding.object_kind)
+        || !valid_identifier_text(&binding.object_id)
+        || !valid_identifier_text(&binding.storage_endpoint_id)
+        || binding.max_bytes == 0
+        || binding.max_bytes > i64::MAX as u64
+        || (matches!(binding.object_kind.as_str(), "archive_stage" | "native_run")
+            && !valid_archive_id(&binding.object_id))
+    {
+        return Err(StateError::InvalidInput);
+    }
+    let mut parts = binding.storage_identity.split(':');
+    let prefix = parts.next();
+    let device = parts.next().ok_or(StateError::InvalidInput)?;
+    let inode = parts.next().ok_or(StateError::InvalidInput)?;
+    if prefix != Some("unix")
+        || parts.next().is_some()
+        || parse_archive_counter(device).is_err()
+        || parse_archive_counter(inode).is_err()
+        || binding.volume_identity != format!("unix:{device}")
+    {
+        return Err(StateError::InvalidInput);
+    }
+    Ok(())
+}
+
+fn get_staging_owner(
+    connection: &Connection,
+    kind: &str,
+    id: &str,
+) -> Result<Option<(String, String)>, StateError> {
+    let query = match kind {
+        "manifest" => {
+            "SELECT storage_endpoint_id, storage_identity FROM manifest_artifacts WHERE artifact_id = ?1"
+        }
+        "payload" => {
+            "SELECT storage_endpoint_id, storage_identity FROM payload_artifacts WHERE artifact_id = ?1"
+        }
+        "archive_stage" => {
+            "SELECT storage_endpoint_id, storage_identity FROM archive_stages WHERE stage_id = ?1"
+        }
+        "native_run" => {
+            "SELECT storage_endpoint_id, storage_identity FROM native_runs WHERE run_id = ?1"
+        }
+        _ => return Err(StateError::InvalidInput),
+    };
+    connection
+        .query_row(query, [id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .optional()
+        .map_err(StateError::from)
+}
+
+// Journal sizes are decimal text; sum in Rust with checked arithmetic.
+fn get_staging_persisted_bytes(
+    connection: &Connection,
+    kind: &str,
+    id: &str,
+) -> Result<u64, StateError> {
+    let query = match kind {
+        "manifest" => "SELECT ciphertext_bytes FROM manifest_artifacts WHERE artifact_id = ?1",
+        "payload" => "SELECT ciphertext_bytes FROM payload_artifacts WHERE artifact_id = ?1",
+        "archive_stage" => {
+            "SELECT catalog_ciphertext_bytes FROM archive_stages WHERE stage_id = ?1"
+        }
+        "native_run" => return Ok(0),
+        _ => return Err(StateError::InvalidInput),
+    };
+    let value: Option<String> = connection.query_row(query, [id], |row| row.get(0))?;
+    let mut total = value
+        .as_deref()
+        .map(parse_archive_counter)
+        .transpose()?
+        .unwrap_or(0);
+    if kind == "archive_stage" {
+        let mut statement = connection.prepare("SELECT ciphertext_bytes FROM archive_files WHERE stage_id = ?1 AND ciphertext_bytes IS NOT NULL")?;
+        let rows = statement.query_map([id], |row| row.get::<_, String>(0))?;
+        for row in rows {
+            total = total
+                .checked_add(parse_archive_counter(&row?)?)
+                .ok_or(StateError::QuotaExceeded)?;
+        }
+    }
+    Ok(total)
+}
+
+fn read_staging_quota(
+    connection: &Connection,
+    kind: &str,
+    id: &str,
+) -> Result<Option<StagingQuotaRecord>, StateError> {
+    connection.query_row(
+        "SELECT object_kind, object_id, storage_endpoint_id, storage_identity, volume_identity, max_bytes FROM staging_quota WHERE object_kind = ?1 AND object_id = ?2",
+        params![kind, id],
+        |row| {
+            let maximum_bytes: i64 = row.get(5)?;
+            let maximum_bytes = u64::try_from(maximum_bytes)
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(5, maximum_bytes))?;
+            Ok(StagingQuotaRecord {
+                binding: StagingQuotaBinding {
+                    object_kind: row.get(0)?,
+                    object_id: row.get(1)?,
+                    storage_endpoint_id: row.get(2)?,
+                    storage_identity: row.get(3)?,
+                    volume_identity: row.get(4)?,
+                    max_bytes: maximum_bytes,
+                },
+            })
+        },
+    ).optional().map_err(StateError::from)
+}
+
+fn get_staging_totals(
+    connection: &Connection,
+    volume: Option<&str>,
+) -> Result<(u64, u64), StateError> {
+    let mut statement = connection.prepare(
+        "SELECT max_bytes FROM staging_quota WHERE (?1 IS NULL OR volume_identity = ?1)",
+    )?;
+    let rows = statement.query_map([volume], |row| row.get::<_, i64>(0))?;
+    let mut total = 0u64;
+    let mut count = 0u64;
+    for row in rows {
+        count = count.checked_add(1).ok_or(StateError::QuotaExceeded)?;
+        if count > MAX_STAGING_OBJECTS {
+            return Err(StateError::QuotaExceeded);
+        }
+        let bytes = u64::try_from(row?).map_err(|_| StateError::InvalidInput)?;
+        total = total.checked_add(bytes).ok_or(StateError::QuotaExceeded)?;
+    }
+    Ok((total, count))
 }

@@ -310,6 +310,21 @@ fn reconciles_recorded_staging_without_running_a_worker() {
     let store = create_store(&native);
     let binding = get_binding(&store, "run_1");
     state.prepare_native_run(&binding).unwrap();
+    let metadata = fs::metadata(&native).unwrap();
+    state
+        .reserve_staging_quota(
+            &relic::staging_quota::StagingQuotaBinding {
+                object_kind: "native_run".into(),
+                object_id: "run_1".into(),
+                storage_endpoint_id: binding.storage_endpoint_id.clone(),
+                storage_identity: binding.storage_identity.clone(),
+                volume_identity: format!("unix:{}", metadata.dev()),
+                max_bytes: 24 * 1024 * 1024 + 84,
+            },
+            16 * 1024 * 1024 * 1024,
+            16 * 1024 * 1024 * 1024,
+        )
+        .unwrap();
     let container = native.join("native_run_1");
     fs::create_dir(&container).unwrap();
     fs::set_permissions(&container, fs::Permissions::from_mode(0o700)).unwrap();

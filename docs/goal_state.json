@@ -327,15 +327,16 @@
         "docs/evidence/payload_store.json",
         "docs/evidence/restore_store.json",
         "docs/evidence/multipass_sort.json",
-        "docs/evidence/native_run_store.json"
+        "docs/evidence/native_run_store.json",
+        "docs/evidence/staging_quota.json"
     ],
     "blockers": [],
-    "next_action": "Implement persistent node-wide staging quota and controller startup ownership reconstruction, then sole-credential fenced destination mutations and native receipts; continue all mandatory phases.",
+    "next_action": "Implement full controller startup ownership/exclusion recovery and sole-credential serialized destination publication gateway with native reconciliation and durable receipts; then owned cleanup and durable quota credits, remaining storage/platform profiles, and all later mandatory phases.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "e44e78930d4e58c7e637bae89984360e085655c60a0552265e181f04514c47d0",
+    "source_fingerprint": "b2e4334fd5b260d4c3c956e96b4ee8486d44c1b812fe80bc4a057ec32cb72be8",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -817,17 +818,32 @@
                 "docs/evidence/native_run_store.json"
             ],
             "limits": "Private staging only; no final destination authority, fenced admission, receipt, or enabled daemon backup dispatch; Persistent node-wide disk quotas and cleanup still required; active stage reservations do not account retained disk after completion; Controller startup delegated-scope quiescence and persistent admission reconstruction remain incomplete; Process fault fixtures do not prove power-loss durability or arbitrary filesystem-provider acknowledgement semantics; Linux x86_64 containment only; Windows/macOS native worker implementation and large-index/performance qualification pending; Existing portable ASCII regular-file/directory profile without original metadata; full source names, snapshots, S3 and all later phases pending"
+        },
+        {
+            "name": "Durable owned staging ciphertext quota and first-use inventory gate",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "src/staging_quota.rs",
+                "src/state.rs",
+                "database/migrations/00008_staging_quota.sql",
+                "tests/staging_quota_state.rs",
+                "tests/staging_quota_storage.rs",
+                "tests/archive_disk.rs",
+                "docs/evidence/staging_quota.json"
+            ],
+            "limits": "Logical ciphertext only, not allocated filesystem blocks, metadata/inodes, standalone temporary sorter space or plaintext restore trees; One canonical node state database and external-writer exclusion required; multiple independent databases are not a shared quota authority; Registered storage is not rescanned for unknown files introduced later; full controller startup inventory and delegated-scope quiescence remain pending; Legacy inventory APIs trust physical proof supplied by internal caller; native repository bytes and unknown files require actual caller inventory; No quota release or recursive cleanup; safe durable credits and administrator recovery still pending; Unix device/inode identity is not removable-volume identity across remount/device reuse; Private stages only; production enabled jobs, fenced destination publication/receipts, S3 and all other mandatory full-system gates remain incomplete"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented schema7 private native-run journal with one creation attempt, bounded recovery failures, owned physical layout and keys, native-only restart verification, checked backend write quotas, worker-contained repository fsync, and retained unreaped-worker resources/parent fencing. All195 local tests pass with zero ignored,740.3M peak/no swap. Final source-deletion/native recovery rerun passes; Clippy313.1M and default feature check235.6M pass. Previous9a26dcc nativeCI passed all3targets. Full goal active; persistent quotas/startup quiescence and destination publication controls remain next."
+        "result": "Implemented schema8 persistent logical ciphertext quota across owned manifest/payload/source/native stores, same-volume aliases, immutable replay with currentfree checks, legacyinventory gate, pinned empty firstroot check, durable closednodegate after orphan detection, and source reservation beforeper-stage lock.203fulltests pass before final inventory-gate strengthening andscratchfixture;34affected focusedtests passafter finalchanges. Fullpeak719.8M;focused492.4M;Clippy320.9M;defaultcheck241.9M, allzero swap. Prior1bf9a0c nativeCI42866870779 passedall3targets. Fullgoalactive; quota is logicalciphertextonly, no durablecredits/fullcontrollerinventory/fencedpublicationyet."
     },
     "remote_checkpoint": {
-        "commit": "9a26dcce6b3d510caf070be27fe0bb8225df4da4",
+        "commit": "1bf9a0ce12b5d83fc8a7d5a6bde0695f20727d19",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42858335229,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42858335229",
+        "native_ci_run_id": 42866870779,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42866870779",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -837,10 +853,10 @@
         }
     },
     "prior_native_checkpoint": {
-        "commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
+        "commit": "9a26dcce6b3d510caf070be27fe0bb8225df4da4",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42842979485,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42842979485",
+        "native_ci_run_id": 42858335229,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42858335229",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -926,6 +942,19 @@
                 "linux-x86_64": "success",
                 "macos-arm64": "success",
                 "windows-x86_64": "failure: five-second initialization lock deadline expired"
+            }
+        },
+        {
+            "commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42842979485,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42842979485",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
             }
         }
     ],

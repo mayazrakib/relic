@@ -693,12 +693,7 @@ impl ArchiveDiskStore {
         &self.0.identity
     }
 
-    fn acquire_lease(
-        &self,
-        request: &ArchiveDiskRequest<'_>,
-        job: &ActiveJob,
-        can_create_lock: bool,
-    ) -> Result<Arc<Lease>, ArchiveDiskError> {
+    fn check_request(&self, request: &ArchiveDiskRequest<'_>) -> Result<(), ArchiveDiskError> {
         let limits = request.limits;
         if !is_id(&request.binding.stage_id)
             || limits.max_entries == 0
@@ -713,6 +708,17 @@ impl ArchiveDiskStore {
         {
             return Err(ArchiveDiskError::INVALID);
         }
+        Ok(())
+    }
+
+    fn acquire_lease(
+        &self,
+        request: &ArchiveDiskRequest<'_>,
+        job: &ActiveJob,
+        can_create_lock: bool,
+    ) -> Result<Arc<Lease>, ArchiveDiskError> {
+        self.check_request(request)?;
+        let limits = request.limits;
         request
             .guard
             .check()
@@ -759,6 +765,35 @@ impl ArchiveDiskStore {
         }))
     }
 
+    fn reserve_quota(
+        &self,
+        state: &mut StateStore,
+        request: &ArchiveDiskRequest<'_>,
+    ) -> Result<(), ArchiveDiskError> {
+        request
+            .guard
+            .check()
+            .map_err(|_| ArchiveDiskError::RESOURCE)?;
+        crate::staging_quota::reserve_owned_staging_quota(
+            state,
+            &self.0.endpoint,
+            &crate::staging_quota::StagingQuotaBinding {
+                object_kind: "archive_stage".into(),
+                object_id: request.binding.stage_id.clone(),
+                storage_endpoint_id: request.binding.storage_endpoint_id.clone(),
+                storage_identity: request.binding.storage_identity.clone(),
+                volume_identity: format!("unix:{}", self.0.endpoint.identity().device),
+                max_bytes: request
+                    .limits
+                    .max_ciphertext_bytes
+                    .checked_add(CATALOG_CIPHER_BYTES)
+                    .ok_or(ArchiveDiskError::LIMIT)?,
+            },
+        )
+        .map_err(|_| ArchiveDiskError::STATE)?;
+        Ok(())
+    }
+
     pub fn create_source(
         &self,
         state: &mut StateStore,
@@ -767,6 +802,7 @@ impl ArchiveDiskStore {
         request: ArchiveDiskRequest<'_>,
         job: &ActiveJob,
     ) -> Result<DiskArchiveSource, ArchiveDiskError> {
+        self.check_request(&request)?;
         let _verification_reservation = job
             .reserve_stage(
                 None,
@@ -777,7 +813,6 @@ impl ArchiveDiskStore {
                 request.guard,
             )
             .map_err(|_| ArchiveDiskError::RESOURCE)?;
-        let lease = self.acquire_lease(&request, job, true)?;
         let record = state
             .prepare_archive_stage(request.binding)
             .map_err(|_| ArchiveDiskError::STATE)?;
@@ -802,6 +837,8 @@ impl ArchiveDiskStore {
         {
             return Err(ArchiveDiskError::LIMIT);
         }
+        self.reserve_quota(state, &request)?;
+        let lease = self.acquire_lease(&request, job, true)?;
         let capture = state
             .get_capture(&record.binding.capture_id)
             .map_err(|_| ArchiveDiskError::STATE)?
@@ -888,6 +925,7 @@ impl ArchiveDiskStore {
         if record.binding != *request.binding || record.effect_state != "prepared" {
             return Err(ArchiveDiskError::RECONCILIATION_REQUIRED);
         }
+        self.reserve_quota(state, &request)?;
         let lease = self.acquire_lease(&request, job, false)?;
         let capture = state
             .get_capture(&record.binding.capture_id)

@@ -97,6 +97,17 @@ pub struct NativeRunExecution<'a> {
     pub guard: &'a StageGuard,
 }
 
+fn get_repository_budget(record: &NativeRunRecord) -> Result<u64, NativeRunError> {
+    record
+        .payload_bytes
+        .parse::<u64>()
+        .map_err(|_| NativeRunError::STATE)?
+        .checked_mul(2)
+        .and_then(|bytes| bytes.checked_add(16 * 1024 * 1024))
+        .map(|bytes| bytes.min(MAX_REPOSITORY_BYTES))
+        .ok_or(NativeRunError::CAPACITY)
+}
+
 fn get_identity(file: &File) -> Result<String, NativeRunError> {
     let metadata = file.metadata().map_err(|_| NativeRunError::STORAGE)?;
     Ok(format!("unix:{}:{}", metadata.dev(), metadata.ino()))
@@ -419,6 +430,37 @@ impl NativeRunStore {
         })
     }
 
+    fn reserve_quota(
+        &self,
+        state: &mut StateStore,
+        record: &NativeRunRecord,
+    ) -> Result<(), NativeRunError> {
+        self.validate_record(record)?;
+        crate::staging_quota::reserve_owned_staging_quota(
+            state,
+            &self.endpoint,
+            &crate::staging_quota::StagingQuotaBinding {
+                object_kind: "native_run".into(),
+                object_id: record.binding.run_id.clone(),
+                storage_endpoint_id: record.binding.storage_endpoint_id.clone(),
+                storage_identity: record.binding.storage_identity.clone(),
+                volume_identity: format!("unix:{}", self.endpoint.identity().device),
+                max_bytes: get_repository_budget(record)?
+                    .checked_add(SCRATCH_BYTES)
+                    .ok_or(NativeRunError::CAPACITY)?,
+            },
+        )
+        .map_err(|error| match error {
+            crate::state::StateError::EffectConflict
+            | crate::state::StateError::InventoryRequired => {
+                NativeRunError::RECONCILIATION_REQUIRED
+            }
+            crate::state::StateError::QuotaExceeded => NativeRunError::CAPACITY,
+            _ => NativeRunError::STATE,
+        })?;
+        Ok(())
+    }
+
     pub fn prepare(
         &self,
         state: &mut StateStore,
@@ -437,6 +479,7 @@ impl NativeRunStore {
             .prepare_native_run(binding)
             .map_err(|_| NativeRunError::STATE)?;
         self.validate_record(&record)?;
+        self.reserve_quota(state, &record)?;
         let lock = self.acquire_parent_lock(&record)?;
         if record.effect_state != "prepared" {
             self.open_layout(&record)?;
@@ -547,6 +590,7 @@ impl NativeRunStore {
             .get_native_run(run_id)
             .map_err(|_| NativeRunError::STATE)?
             .ok_or(NativeRunError::STATE)?;
+        self.reserve_quota(state, &record)?;
         let lock = self.acquire_parent_lock(&record)?;
         if record.effect_state == "staging" {
             let container = open_directory(
@@ -618,15 +662,8 @@ impl NativeRunStore {
             return Err(NativeRunError::STATE);
         }
         let layout = self.open_layout(record)?;
-        let payload_bytes = record
-            .payload_bytes
-            .parse::<u64>()
-            .map_err(|_| NativeRunError::STATE)?;
-        let repository_max_bytes = payload_bytes
-            .checked_mul(2)
-            .and_then(|bytes| bytes.checked_add(16 * 1024 * 1024))
-            .ok_or(NativeRunError::CAPACITY)?
-            .min(MAX_REPOSITORY_BYTES);
+        let repository_max_bytes = get_repository_budget(record)?;
+        self.reserve_quota(state, record)?;
         let spool_bytes = repository_max_bytes
             .checked_add(SCRATCH_BYTES)
             .ok_or(NativeRunError::CAPACITY)?;
