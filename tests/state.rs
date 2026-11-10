@@ -277,3 +277,40 @@ fn rejects_shared_symlink_and_hardlinked_database() {
         Err(StateError::InsecureDirectory)
     ));
 }
+
+#[test]
+fn initialization_waits_for_lock_longer_than_five_seconds() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("state");
+    drop(StateStore::open(&path).unwrap());
+    let lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path.join("state.lock"))
+        .unwrap();
+    lock.try_lock().unwrap();
+    let (started_sender, started_receiver) = mpsc::channel();
+    let (finished_sender, finished_receiver) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        started_sender.send(()).unwrap();
+        let is_valid = StateStore::open(&path)
+            .and_then(|store| store.check_integrity())
+            .unwrap_or(false);
+        finished_sender.send(is_valid).unwrap();
+    });
+    started_receiver.recv().unwrap();
+    assert!(matches!(
+        finished_receiver.recv_timeout(Duration::from_millis(5500)),
+        Err(mpsc::RecvTimeoutError::Timeout)
+    ));
+    drop(lock);
+    assert!(
+        finished_receiver
+            .recv_timeout(Duration::from_secs(30))
+            .unwrap()
+    );
+    worker.join().unwrap();
+}

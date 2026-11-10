@@ -47,3 +47,7 @@ The `macos-15` runner is ARM64 and the `ubuntu-24.04` and `windows-2025` runners
 ## 12. Tiered Ordering Milestone
 
 [Run 42826545847](https://github.com/mayazrakib/relic/actions/runs/42826545847) passed on Linux x86_64, Windows x86_64, and macOS arm64 for `fe63bbd`. Unix jobs execute tiered encrypted ordering and endpoint-identifier fixtures; Windows retains portable contract and journal coverage. The frozen archive source and staged-manifest verification changes require fresh native execution. The external independent recovery fixture is an explicit local check and remains outside default native CI.
+
+## 13. Frozen Archive Milestone
+
+[Run 42838374013](https://github.com/mayazrakib/relic/actions/runs/42838374013) passed on Linux and macOS for `5828d90`. Windows built successfully but failed the concurrent state initialization test when the five-second initialization lock deadline expired. This is a failed whole-target result. The correction retains the four-worker concurrency case, uses a finite thirty-second initialization-lock deadline, keeps SQLite's five-second busy timeout, and adds a regression that holds the initialization lock beyond five seconds. The correction and new disk staging require fresh native execution.

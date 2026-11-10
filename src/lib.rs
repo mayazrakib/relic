@@ -1,4 +1,6 @@
 pub mod archive;
+#[cfg(all(feature = "embedded-archive", unix))]
+pub mod archive_disk;
 #[cfg(feature = "embedded-archive")]
 pub mod archive_manifest;
 #[cfg(feature = "embedded-archive")]

@@ -175,7 +175,7 @@ fn get_path(entry: &ManifestEntry) -> Result<PathBuf, ArchiveSourceError> {
     Ok(path)
 }
 
-fn validate_entry(
+pub(crate) fn validate_entry(
     entry: &ManifestEntry,
     binding: &CaptureBinding,
 ) -> Result<(PathBuf, usize), ArchiveSourceError> {
@@ -233,7 +233,9 @@ fn get_context(
     Ok(digest.finalize().into())
 }
 
-fn get_file_details(entry: &ManifestEntry) -> Result<(u64, [u8; 32]), ArchiveSourceError> {
+pub(crate) fn get_file_details(
+    entry: &ManifestEntry,
+) -> Result<(u64, [u8; 32]), ArchiveSourceError> {
     let text = entry
         .size_bytes
         .as_deref()
@@ -527,8 +529,8 @@ pub struct FrozenArchiveOpen {
     limits: SpoolLimits,
 }
 
-pub struct VerifiedArchiveReader {
-    reader: EncryptedSpoolReader<Cursor<Arc<[u8]>>>,
+pub struct VerifiedArchiveReader<R: Read> {
+    reader: EncryptedSpoolReader<R>,
     expected_bytes: u64,
     expected_digest: [u8; 32],
     actual_bytes: u64,
@@ -542,7 +544,7 @@ fn get_rustic_error() -> Box<RusticError> {
 }
 
 impl ReadSourceOpen for FrozenArchiveOpen {
-    type Reader = VerifiedArchiveReader;
+    type Reader = VerifiedArchiveReader<Cursor<Arc<[u8]>>>;
 
     fn open(self) -> RusticResult<Self::Reader> {
         let reader = EncryptedSpoolReader::new(
@@ -553,19 +555,33 @@ impl ReadSourceOpen for FrozenArchiveOpen {
             &self.guard,
         )
         .map_err(|_| get_rustic_error())?;
-        Ok(VerifiedArchiveReader {
+        Ok(VerifiedArchiveReader::new(
             reader,
-            expected_bytes: self.expected_bytes,
-            expected_digest: self.expected_digest,
+            self.expected_bytes,
+            self.expected_digest,
+        ))
+    }
+}
+
+impl<R: Read> VerifiedArchiveReader<R> {
+    pub(crate) fn new(
+        reader: EncryptedSpoolReader<R>,
+        expected_bytes: u64,
+        expected_digest: [u8; 32],
+    ) -> Self {
+        Self {
+            reader,
+            expected_bytes,
+            expected_digest,
             actual_bytes: 0,
             digest: Sha256::new(),
             is_verified: false,
             is_failed: false,
-        })
+        }
     }
 }
 
-impl Read for VerifiedArchiveReader {
+impl<R: Read> Read for VerifiedArchiveReader<R> {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
         if self.is_failed {
             return Err(io::Error::other("frozen archive source failed"));

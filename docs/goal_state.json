@@ -329,12 +329,12 @@
         "docs/evidence/multipass_sort.json"
     ],
     "blockers": [],
-    "next_action": "Push and observe new archive-capture native CI without blind retries. Implement a one-pass sealed-payload visitor producing owned encrypted per-file staging with bounded lazy opens, aggregate spool/inode reservations, authenticated catalogue admission and crash reconciliation. Final entry digest arrives after bytes: bind provisional stream to capture+PayloadFile header and final entry through verified catalogue/reader EOF. Then isolate engine memory/cancellation and implement sole-credential fenced mutations and durable native receipts before enabled archive jobs. Continue all remaining full-system gates. Preserve README badge edit;1GiB/high768MiB/no swap; one worker maximum.",
+    "next_action": "Push/observe fresh native CI for disk staging plus Windows initialization deadline correction without restarting a live run. Implement isolated embedded-engine worker with bounded keys/control IPC, aggregate parent/child memory containment, bounded cancellation and reaping, and exact staged manifest verification. Do not create sibling runtime cgroups outside the validation1GiB aggregate envelope; qualify delegated subtree or shared bounded slice first. Then sole-credential fenced mutation gateway and native durable publication/receipts. Extend source segmentation/catalogue and Windows staging as required; retain full13phase scope, MIT, master boundary, one worker and zero swap. Preserve README badge edit.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "a8041fa671c8fe583558b9596c3950640c9af52e3d14cf684952695d0c147dd9",
+    "source_fingerprint": "e3a61e54c13a1e8b87abbf7bf351de106b0176be5fbe60dbe70096c2fa841388",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -742,31 +742,64 @@
                 "docs/evidence/archive_capture.json"
             ],
             "limits": "Native SDK full index/cache/chunk allocations and blocking calls require isolated-worker resource/cancellation qualification; Private staged snapshot verification does not establish destination mutation authority, fenced serialization, native receipts or durable publication; Comparator runtime fixtures are Unix-only pending Windows encrypted manifest ordering; No production archive/S3 jobs, cleanup, key-provider lifecycle, complete metadata or remaining system acceptance qualification"
+        },
+        {
+            "name": "Durable archive staging and per-file ownership journal",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "database/migrations/00006_archive_stages.sql",
+                "tests/archive_stage_state.rs",
+                "docs/evidence/archive_disk.json"
+            ],
+            "limits": "Trusted state caller supplies verified evidence; no filesystem authentication in low-level state API"
+        },
+        {
+            "name": "Journaled bounded encrypted disk archive source and process reconciliation",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/archive_disk.rs",
+                "tests/archive_disk.rs",
+                "docs/archive_disk.md",
+                "docs/evidence/archive_disk.json"
+            ],
+            "limits": "Private staging only; enabled destination archive jobs remain gated; Portable ASCII directory-rooted file/directory profile without original metadata;256MiB aggregate file ciphertext and1MiB catalogue class; Windows file staging/order unavailable; macOS raced mutable-device open isolation still needs contained worker qualification; Native SDK full index/cache/chunk allocations and blocking calls require isolated worker resource/cancellation containment; Persistent node-wide storage accounting, segmentation beyond class limits, automatic cleanup, key-provider lifecycle and power-loss durability remain unqualified; Destination sole-credential mutation fencing, native durable receipts, S3 and every subsequent full-system acceptance phase remain required"
+        },
+        {
+            "name": "Finite native startup lock contention correction",
+            "phase": 2,
+            "status": "locally_passed_native_pending",
+            "evidence": [
+                "tests/state.rs",
+                "docs/evidence/archive_disk.json"
+            ],
+            "limits": "Fresh Windows native execution required; maximum two corrective cycles"
         }
     ],
     "last_goal_turn": {
         "classification": "progress",
-        "result": "Implemented encrypted frozen ReadSource and exact native snapshot-to-manifest verification. All154 tests pass with zero ignored, including independent restic recovery and SDK skip/read-size regressions. Added complete declared-source root coverage after review. Test peak735.1M; warnings-denied Clippy258.3M; zero swap. Native fe63bbd run42826545847 verified success on all three targets. Full goal remains active; enabled archive jobs stay gated pending durable bounded locators, worker containment and fenced publication."
+        "result": "Implemented journaled one-pass encrypted disk archive source with lazy bounded readers, authenticated catalogue, sealed source snapshots, per-file ownership, resource leases and crash reconciliation. All165 tests pass, zero ignored; final test peak768.4M/no swap; Clippy and formatting pass. Native archive source-deletion fixture matches frozen manifest. Prior5828d90 CI passed Linux/macOS but Windows initialization lock timed out; finite30s correction and5.5s held-lock regression pass locally. Full goal active; worker containment, destination fencing/receipts and later phases remain required."
     },
     "remote_checkpoint": {
-        "commit": "fe63bbd983096301a0ae80f16042591faeae4044",
+        "commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42826545847,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42826545847",
+        "native_ci_run_id": 42838374013,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42838374013",
         "status": "in_progress_when_observed",
         "push_transport": "existing authorized SSH credential"
     },
     "prior_native_checkpoint": {
-        "commit": "fe63bbd983096301a0ae80f16042591faeae4044",
+        "commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42826545847,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42826545847",
-        "status": "completed_successfully",
+        "native_ci_run_id": 42838374013,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42838374013",
+        "status": "completed_with_windows_initialization_timeout",
         "push_transport": "existing authorized SSH credential",
         "results": {
             "linux-x86_64": "success",
-            "windows-x86_64": "success",
-            "macos-arm64": "success"
+            "macos-arm64": "success",
+            "windows-x86_64": "failure: five-second initialization lock deadline expired"
         }
     },
     "earlier_native_checkpoints": [
@@ -820,6 +853,19 @@
                 "linux-x86_64": "success",
                 "macos-arm64": "success",
                 "windows-x86_64": "failure: Unix cfg attached to shared capture helper"
+            }
+        },
+        {
+            "commit": "fe63bbd983096301a0ae80f16042591faeae4044",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42826545847,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42826545847",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
             }
         }
     ],
@@ -883,6 +929,15 @@
             "correction": "Rename generic run_with_verifier declaration consistently",
             "status": "resolved",
             "verification": "134-test full suite and warnings-denied Clippy"
+        },
+        "windows_initialization_lock_deadline": {
+            "initial_run": 42838374013,
+            "initial_commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
+            "observed_error": "State initialization OS-lock timeout under concurrent Windows native startup",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Named finite30s initialization wait; retain SQLite5s busy timeout and four-worker concurrency fixture; add5.5s held-lock regression",
+            "status": "locally_resolved_pending_native_verification"
         }
     },
     "preserved_worktree_changes": [

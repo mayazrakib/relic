@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[derive(Debug)]
 pub enum StateError {
     Io(std::io::Error),
@@ -177,6 +179,63 @@ pub struct RestoreRecord {
     pub staging_identity: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArchiveStageBinding {
+    pub stage_id: String,
+    pub capture_id: String,
+    pub payload_artifact_id: String,
+    pub storage_endpoint_id: String,
+    pub storage_identity: String,
+    pub key_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArchiveStageRecord {
+    pub binding: ArchiveStageBinding,
+    pub effect_state: String,
+    pub manifest_digest: String,
+    pub manifest_entry_count: String,
+    pub payload_ciphertext_digest: String,
+    pub file_count: String,
+    pub payload_bytes: String,
+    pub catalog_ciphertext_digest: Option<String>,
+    pub catalog_ciphertext_bytes: Option<String>,
+    pub catalog_identity: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArchiveFileRecord {
+    pub stage_id: String,
+    pub file_id: String,
+    pub header_digest: String,
+    pub plaintext_bytes: String,
+    pub effect_state: String,
+    pub ciphertext_digest: Option<String>,
+    pub ciphertext_bytes: Option<String>,
+    pub identity: Option<String>,
+}
+
+type ArchiveFileSealRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+type ArchiveStageSealRow = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
 type RestoreSnapshot = (String, String, String, String, String);
 type RestorePrior = (String, String, String, String, String, String);
 
@@ -295,7 +354,7 @@ impl StateStore {
             }
         }
 
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + INITIALIZATION_LOCK_TIMEOUT;
 
         loop {
             match bootstrap_lock.try_lock() {
@@ -377,7 +436,7 @@ impl StateStore {
         let version: u32 =
             transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
-        if version > 5 {
+        if version > 6 {
             return Err(StateError::UnsupportedVersion);
         }
         if version == 0 {
@@ -400,6 +459,12 @@ impl StateStore {
         if version <= 4 {
             transaction.execute_batch(include_str!(
                 "../database/migrations/00005_restore_intents.sql"
+            ))?;
+        }
+
+        if version <= 5 {
+            transaction.execute_batch(include_str!(
+                "../database/migrations/00006_archive_stages.sql"
             ))?;
         }
 
@@ -1220,6 +1285,320 @@ impl StateStore {
             .ok_or(StateError::EffectConflict)
     }
 
+    pub fn prepare_archive_stage(
+        &mut self,
+        binding: &ArchiveStageBinding,
+    ) -> Result<ArchiveStageRecord, StateError> {
+        if !valid_archive_id(&binding.stage_id)
+            || !valid_identifier_text(&binding.capture_id)
+            || !valid_identifier_text(&binding.payload_artifact_id)
+            || !valid_identifier_text(&binding.storage_endpoint_id)
+            || !valid_identifier_text(&binding.storage_identity)
+            || !valid_identifier_text(&binding.key_ref)
+        {
+            return Err(StateError::InvalidInput);
+        }
+
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let existing: Option<(String, String, String, String, String, String)> = transaction.query_row(
+            "SELECT capture_id, payload_artifact_id, storage_endpoint_id, storage_identity, key_ref, effect_state FROM archive_stages WHERE stage_id = ?1",
+            [&binding.stage_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+        ).optional()?;
+
+        if let Some((capture, payload, endpoint, identity, key_ref, state)) = existing {
+            if capture != binding.capture_id
+                || payload != binding.payload_artifact_id
+                || endpoint != binding.storage_endpoint_id
+                || identity != binding.storage_identity
+                || key_ref != binding.key_ref
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+            if state == "abandoned" {
+                return Err(StateError::EffectConflict);
+            }
+        } else {
+            let snapshot: Option<RestoreSnapshot> = transaction.query_row(
+                "SELECT p.manifest_digest, p.ciphertext_digest, p.manifest_entry_count, p.file_count, p.payload_bytes FROM captures c JOIN payload_artifacts p ON p.artifact_id = c.payload_artifact_id AND p.capture_id = c.capture_id JOIN manifest_artifacts m ON m.artifact_id = c.manifest_artifact_id AND m.capture_id = c.capture_id WHERE c.capture_id = ?1 AND p.artifact_id = ?2 AND p.effect_state = 'sealed' AND m.effect_state = 'sealed' AND c.manifest_digest = p.manifest_digest AND c.manifest_digest = m.manifest_digest AND c.manifest_entry_count = p.manifest_entry_count AND c.manifest_entry_count = m.manifest_entry_count",
+                params![binding.capture_id, binding.payload_artifact_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            ).optional()?;
+            let (digest, cipher, entries, files, bytes) =
+                snapshot.ok_or(StateError::EffectConflict)?;
+            if parse_archive_counter(&files)? > 10_000
+                || parse_archive_counter(&files)? > parse_archive_counter(&entries)?
+            {
+                return Err(StateError::InvalidInput);
+            }
+            parse_archive_counter(&bytes)?;
+            transaction.execute(
+                "INSERT INTO archive_stages (stage_id, capture_id, payload_artifact_id, storage_endpoint_id, storage_identity, key_ref, effect_state, manifest_digest, manifest_entry_count, payload_ciphertext_digest, file_count, payload_bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'prepared', ?7, ?8, ?9, ?10, ?11)",
+                params![binding.stage_id, binding.capture_id, binding.payload_artifact_id, binding.storage_endpoint_id, binding.storage_identity, binding.key_ref, digest, entries, cipher, files, bytes],
+            )?;
+        }
+        transaction.commit()?;
+        self.get_archive_stage(&binding.stage_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn get_archive_stage(
+        &self,
+        stage_id: &str,
+    ) -> Result<Option<ArchiveStageRecord>, StateError> {
+        if !valid_archive_id(stage_id) {
+            return Err(StateError::InvalidInput);
+        }
+        self.connection.query_row(
+            "SELECT stage_id, capture_id, payload_artifact_id, storage_endpoint_id, storage_identity, key_ref, effect_state, manifest_digest, manifest_entry_count, payload_ciphertext_digest, file_count, payload_bytes, catalog_ciphertext_digest, catalog_ciphertext_bytes, catalog_identity FROM archive_stages WHERE stage_id = ?1",
+            [stage_id],
+            |row| Ok(ArchiveStageRecord {
+                binding: ArchiveStageBinding {stage_id: row.get(0)?, capture_id: row.get(1)?, payload_artifact_id: row.get(2)?, storage_endpoint_id: row.get(3)?, storage_identity: row.get(4)?, key_ref: row.get(5)?},
+                effect_state: row.get(6)?, manifest_digest: row.get(7)?, manifest_entry_count: row.get(8)?, payload_ciphertext_digest: row.get(9)?, file_count: row.get(10)?, payload_bytes: row.get(11)?, catalog_ciphertext_digest: row.get(12)?, catalog_ciphertext_bytes: row.get(13)?, catalog_identity: row.get(14)?,
+            }),
+        ).optional().map_err(StateError::from)
+    }
+
+    pub fn get_archive_file(
+        &self,
+        stage_id: &str,
+        file_id: &str,
+    ) -> Result<Option<ArchiveFileRecord>, StateError> {
+        if !valid_archive_id(stage_id) || !valid_archive_id(file_id) {
+            return Err(StateError::InvalidInput);
+        }
+        self.connection.query_row(
+            "SELECT stage_id, file_id, header_digest, plaintext_bytes, effect_state, ciphertext_digest, ciphertext_bytes, identity FROM archive_files WHERE stage_id = ?1 AND file_id = ?2",
+            params![stage_id, file_id],
+            |row| Ok(ArchiveFileRecord {stage_id: row.get(0)?, file_id: row.get(1)?, header_digest: row.get(2)?, plaintext_bytes: row.get(3)?, effect_state: row.get(4)?, ciphertext_digest: row.get(5)?, ciphertext_bytes: row.get(6)?, identity: row.get(7)?}),
+        ).optional().map_err(StateError::from)
+    }
+
+    pub fn list_archive_files(
+        &self,
+        stage_id: &str,
+        after: &str,
+        limit: u32,
+    ) -> Result<Vec<ArchiveFileRecord>, StateError> {
+        if !valid_archive_id(stage_id)
+            || (!after.is_empty() && !valid_archive_id(after))
+            || !(1..=1000).contains(&limit)
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let mut statement = self.connection.prepare("SELECT file_id FROM archive_files WHERE stage_id = ?1 AND file_id > ?2 ORDER BY file_id LIMIT ?3")?;
+        let rows = statement.query_map(params![stage_id, after, limit], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let mut files = Vec::new();
+        for row in rows {
+            files.push(
+                self.get_archive_file(stage_id, &row?)?
+                    .ok_or(StateError::EffectConflict)?,
+            );
+        }
+        Ok(files)
+    }
+
+    pub fn prepare_archive_file(
+        &self,
+        stage_id: &str,
+        file_id: &str,
+        header_digest: &str,
+        plaintext_bytes: u64,
+    ) -> Result<ArchiveFileRecord, StateError> {
+        if !valid_archive_id(stage_id)
+            || !valid_archive_id(file_id)
+            || !valid_digest_text(header_digest)
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction =
+            rusqlite::Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)?;
+        let stage: Option<(String, String, String, String, String)> = transaction.query_row(
+            "SELECT effect_state, file_count, payload_bytes, prepared_count, prepared_bytes FROM archive_stages WHERE stage_id = ?1",
+            [stage_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        ).optional()?;
+        let (state, file_count, payload_bytes, count, bytes) =
+            stage.ok_or(StateError::EffectConflict)?;
+        if state != "prepared" {
+            return Err(StateError::EffectConflict);
+        }
+        let existing: Option<(String, String)> = transaction.query_row(
+            "SELECT header_digest, plaintext_bytes FROM archive_files WHERE stage_id = ?1 AND file_id = ?2", params![stage_id, file_id], |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+        if let Some((digest, size)) = existing {
+            if digest != header_digest || size != plaintext_bytes.to_string() {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else {
+            let count = parse_archive_counter(&count)?
+                .checked_add(1)
+                .ok_or(StateError::InvalidInput)?;
+            let bytes = parse_archive_counter(&bytes)?
+                .checked_add(plaintext_bytes)
+                .ok_or(StateError::InvalidInput)?;
+            if count > 10_000
+                || count > parse_archive_counter(&file_count)?
+                || bytes > parse_archive_counter(&payload_bytes)?
+            {
+                return Err(StateError::InvalidInput);
+            }
+            transaction.execute("INSERT INTO archive_files (stage_id, file_id, header_digest, plaintext_bytes, effect_state) VALUES (?1, ?2, ?3, ?4, 'prepared')", params![stage_id, file_id, header_digest, plaintext_bytes.to_string()])?;
+            transaction.execute("UPDATE archive_stages SET prepared_count = ?1, prepared_bytes = ?2 WHERE stage_id = ?3", params![count.to_string(), bytes.to_string(), stage_id])?;
+        }
+        transaction.commit()?;
+        self.get_archive_file(stage_id, file_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn seal_archive_file(
+        &self,
+        stage_id: &str,
+        file_id: &str,
+        ciphertext_digest: &str,
+        ciphertext_bytes: u64,
+        identity: &str,
+    ) -> Result<ArchiveFileRecord, StateError> {
+        if !valid_archive_id(stage_id)
+            || !valid_archive_id(file_id)
+            || !valid_digest_text(ciphertext_digest)
+            || ciphertext_bytes < 60
+            || !valid_identifier_text(identity)
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction =
+            rusqlite::Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)?;
+        let parent: Option<(String, String, String)> = transaction.query_row("SELECT effect_state, sealed_count, sealed_bytes FROM archive_stages WHERE stage_id = ?1", [stage_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).optional()?;
+        let (parent_state, count, bytes) = parent.ok_or(StateError::EffectConflict)?;
+        let file: Option<ArchiveFileSealRow> = transaction.query_row("SELECT effect_state, plaintext_bytes, ciphertext_digest, ciphertext_bytes, identity FROM archive_files WHERE stage_id = ?1 AND file_id = ?2", params![stage_id, file_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))).optional()?;
+        let (state, plaintext, previous_digest, previous_bytes, previous_identity) =
+            file.ok_or(StateError::EffectConflict)?;
+        if state == "sealed" && parent_state != "abandoned" {
+            if previous_digest.as_deref() != Some(ciphertext_digest)
+                || previous_bytes.as_deref() != Some(ciphertext_bytes.to_string().as_str())
+                || previous_identity.as_deref() != Some(identity)
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else if state == "prepared" && parent_state == "prepared" {
+            let count = parse_archive_counter(&count)?
+                .checked_add(1)
+                .ok_or(StateError::InvalidInput)?;
+            let bytes = parse_archive_counter(&bytes)?
+                .checked_add(parse_archive_counter(&plaintext)?)
+                .ok_or(StateError::InvalidInput)?;
+            transaction.execute("UPDATE archive_files SET effect_state = 'sealed', ciphertext_digest = ?1, ciphertext_bytes = ?2, identity = ?3 WHERE stage_id = ?4 AND file_id = ?5", params![ciphertext_digest, ciphertext_bytes.to_string(), identity, stage_id, file_id])?;
+            transaction.execute("UPDATE archive_stages SET sealed_count = ?1, sealed_bytes = ?2 WHERE stage_id = ?3", params![count.to_string(), bytes.to_string(), stage_id])?;
+        } else {
+            return Err(StateError::EffectConflict);
+        }
+        transaction.commit()?;
+        self.get_archive_file(stage_id, file_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn seal_archive_stage(
+        &mut self,
+        stage_id: &str,
+        catalog_digest: &str,
+        catalog_bytes: u64,
+        catalog_identity: &str,
+    ) -> Result<ArchiveStageRecord, StateError> {
+        if !valid_archive_id(stage_id)
+            || !valid_digest_text(catalog_digest)
+            || catalog_bytes < 60
+            || !valid_identifier_text(catalog_identity)
+        {
+            return Err(StateError::InvalidInput);
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let prior: Option<ArchiveStageSealRow> = transaction.query_row(
+            "SELECT effect_state, file_count, payload_bytes, prepared_count, prepared_bytes, sealed_count, sealed_bytes, catalog_ciphertext_digest, catalog_ciphertext_bytes, catalog_identity FROM archive_stages WHERE stage_id = ?1", [stage_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?)),
+        ).optional()?;
+        let (
+            state,
+            files,
+            bytes,
+            prepared_count,
+            prepared_bytes,
+            sealed_count,
+            sealed_bytes,
+            previous_digest,
+            previous_bytes,
+            previous_identity,
+        ) = prior.ok_or(StateError::EffectConflict)?;
+        if state == "sealed" {
+            if previous_digest.as_deref() != Some(catalog_digest)
+                || previous_bytes.as_deref() != Some(catalog_bytes.to_string().as_str())
+                || previous_identity.as_deref() != Some(catalog_identity)
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+        } else if state == "prepared" {
+            if files != prepared_count
+                || files != sealed_count
+                || bytes != prepared_bytes
+                || bytes != sealed_bytes
+            {
+                return Err(StateError::EffectConflict);
+            }
+            {
+                let mut statement = transaction.prepare(
+                    "SELECT effect_state, plaintext_bytes FROM archive_files WHERE stage_id = ?1",
+                )?;
+                let mut rows = statement.query([stage_id])?;
+                let mut actual_count = 0u64;
+                let mut actual_bytes = 0u64;
+                while let Some(row) = rows.next()? {
+                    let file_state: String = row.get(0)?;
+                    let size: String = row.get(1)?;
+                    actual_count = actual_count
+                        .checked_add(1)
+                        .ok_or(StateError::InvalidInput)?;
+                    actual_bytes = actual_bytes
+                        .checked_add(parse_archive_counter(&size)?)
+                        .ok_or(StateError::InvalidInput)?;
+                    if file_state != "sealed" || actual_count > 10_000 {
+                        return Err(StateError::EffectConflict);
+                    }
+                }
+                if actual_count != parse_archive_counter(&files)?
+                    || actual_bytes != parse_archive_counter(&bytes)?
+                {
+                    return Err(StateError::EffectConflict);
+                }
+            }
+            transaction.execute("UPDATE archive_stages SET effect_state = 'sealed', catalog_ciphertext_digest = ?1, catalog_ciphertext_bytes = ?2, catalog_identity = ?3, system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE stage_id = ?4", params![catalog_digest, catalog_bytes.to_string(), catalog_identity, stage_id])?;
+        } else {
+            return Err(StateError::EffectConflict);
+        }
+        transaction.commit()?;
+        self.get_archive_stage(stage_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
+    pub fn abandon_archive_stage(
+        &mut self,
+        stage_id: &str,
+    ) -> Result<ArchiveStageRecord, StateError> {
+        if !valid_archive_id(stage_id) {
+            return Err(StateError::InvalidInput);
+        }
+        let changed = self.connection.execute("UPDATE archive_stages SET effect_state = 'abandoned', system_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE stage_id = ?1 AND effect_state = 'prepared'", [stage_id])?;
+        if changed != 1 {
+            return Err(StateError::EffectConflict);
+        }
+        self.get_archive_stage(stage_id)?
+            .ok_or(StateError::EffectConflict)
+    }
+
     pub fn bind_publication(&mut self, binding: &Value) -> Result<PublicationRecord, StateError> {
         validate_publication_binding(binding)?;
         let key = binding.get("commit_key").ok_or(StateError::InvalidInput)?;
@@ -1591,4 +1970,20 @@ fn validate_restore_binding(binding: &RestoreBinding) -> Result<(), StateError> 
         return Err(StateError::InvalidInput);
     }
     Ok(())
+}
+
+fn valid_archive_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+fn parse_archive_counter(value: &str) -> Result<u64, StateError> {
+    let number = value.parse::<u64>().map_err(|_| StateError::InvalidInput)?;
+    if value != number.to_string() {
+        return Err(StateError::InvalidInput);
+    }
+    Ok(number)
 }
