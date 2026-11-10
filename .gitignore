@@ -1,0 +1,24 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# Editor Metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Temporary Files
+*.tmp
+*.temp
+*.log
+
+# Build
+target/
+build/
