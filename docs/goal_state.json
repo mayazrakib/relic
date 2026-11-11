@@ -1,7 +1,7 @@
 {
     "schema_version": 1,
     "objective": "Implement the approved Relic full-system plan without weakening its acceptance gates",
-    "status": "active",
+    "status": "paused",
     "baseline": {
         "git_head": "e9a496080bd67ea6eae4a8c4dff06e8f5568ac3e",
         "specification_version": "0.1.0-draft.2",
@@ -329,15 +329,20 @@
         "docs/evidence/multipass_sort.json",
         "docs/evidence/native_run_store.json",
         "docs/evidence/staging_quota.json",
-        "docs/evidence/gateway_journal.json"
+        "docs/evidence/gateway_journal.json",
+        "docs/evidence/gateway_initialization.json",
+        "docs/evidence/gateway_publication.json",
+        "docs/evidence/native_worker_scopes.json",
+        "docs/evidence/physical_registry.json",
+        "docs/evidence/destination_growth.json"
     ],
     "blockers": [],
-    "next_action": "Review and compile unwired gateway_worker.rs; durably bind gateway owner/scratch identities and initialization attempts; integrate bounded sole-credential parent controller and actual tagged native copy/full destination verification/receipt/reconciliation; qualify stable chunking, then all remaining mandatory phases.",
+    "next_action": "Remain paused. Resume only on explicit user instruction, beginning with full startup/source-view inventory and safe cleanup/credits, record retirement, capacity-domain qualification and stable chunking before all remaining full-system gates.",
     "current_specification": {
         "version": "0.1.0-draft.3",
         "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
     },
-    "source_fingerprint": "3a55fa6d20ce7004a85727b1c1677fd8a1dbd7d72f3f0763b4bb631d6449db79",
+    "source_fingerprint": "91b72a74da1900a0d6d4e3331723449621ab6ff0d50017082d0c756985833fe1",
     "work_items": [
         {
             "name": "MIT baseline and finite goal controls",
@@ -854,33 +859,86 @@
             "phase": 3,
             "status": "in_progress",
             "evidence": [
-                "src/gateway_worker.rs"
+                "src/gateway_worker.rs",
+                "src/gateway_store.rs",
+                "src/gateway_layout.rs",
+                "src/worker_identity.rs",
+                "src/worker_runtime.rs",
+                "database/migrations/00010_gateway_layout.sql",
+                "tests/gateway_store.rs",
+                "tests/gateway_layout.rs",
+                "tests/worker_identity.rs",
+                "docs/evidence/gateway_initialization.json",
+                "docs/evidence/gateway_publication.json"
             ],
-            "limits": "Source-only worker implementation is unwired and untested; physical owner/scratch identities still caller evidence until durably bound by controller. No final destination publication enabled."
+            "limits": "Restricted local native copy/full verification, source-free recovery, strict no-effect proof and receipt controller passed. Canonical cross-resource exclusion, private-run scope protocol, source cleanup pins, destination growth reservations, full native profiles and all remaining system gates remain required. Enabled jobs stay gated."
+        },
+        {
+            "name": "Owned local initialization and recorded kernel quiescence",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/gateway_initialization.json"
+            ],
+            "limits": "Restricted Linux local filesystem initialization profile only; not full standalone archive acceptance or publication safety."
+        },
+        {
+            "name": "Restricted local native publication and recovery",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/gateway_publication.json"
+            ],
+            "limits": "Exclusive local ext4/Btrfs/XFS Linux profile only; canonical cross-resource/all-owned-root conflict registry and per-volume outstanding destination growth reservations remain mandatory before enabled jobs; Private NativeRunStore still needs durable kernel scopes across create and verification; trusted source retention prevents cleanup in this slice, but general durable cleanup pins and credits remain required; Existing registered scratch is not a full startup census; physical allocated blocks, directory metadata/inodes, unknown inventory and administrative recovery remain incomplete; Scope identity assumes unique host machine IDs and trusted controller forbidding cgroup rename/migration; local proof does not establish remote request drain, other-host exclusion, quorum or S3 safety; Frozen native source metadata/path profile, stable target-compatible file-archive chunking, large-index and sustained memory/performance qualification remain incomplete; Standalone S3, native Windows/macOS containment, maintenance/retention/replication qualification, copy/mirror/sync, native snapshots, cluster/UI, databases/imaging and installers remain required; no full phase acceptance or release claimed; Process fault fixtures and fsync calls do not establish power-loss qualification; enabled jobs remain gated"
+        },
+        {
+            "name": "Durable private native worker scopes",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/native_worker_scopes.json"
+            ],
+            "limits": "Exclusive local Linux ext4/Btrfs/XFS profile and trusted controller scope ownership; no remote request draining, other-host exclusion, hardware host attestation or shared-storage fencing; Canonical cross-resource/all-owned-root registry and destination-volume outstanding growth reservations remain mandatory before enabling jobs; Legacy unknown scopes need trusted administrative exclusion proof; this checkpoint does not automatically adopt or delete them; Complete startup physical inventory, durable source cleanup pins and credits, stable chunking, larger source/index resource qualification, complete metadata and native names remain open; Windows/macOS worker containment, S3, maintenance, full replication, copy/mirror/sync, native snapshots, cluster/UI, databases/imaging, security/performance soaks and installers remain required; full goal active and enabled jobs gated; Process fault fixtures and synchronization calls do not establish power-loss qualification"
+        },
+        {
+            "name": "Bounded physical-root admission and file-only worker state grants",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/physical_registry.json"
+            ],
+            "limits": "Exclusive one canonical node database and protected root ancestors with external writer/namespace mutation exclusion; no other-host fencing or remote request drain; Original source-view producer lifecycle, complete physical object census, root retirement, safe cleanup/credits and boot/mount-namespace rebasing remain incomplete; changed evidence fails closed; Per-operation metadata snapshots remain future isolation work; workers currently read node database metadata, and parent must exclude path replacement during file capability setup; Destination growth and shared staging capacity-domain accounting are not implemented; Btrfs subvolume device/statfs identities do not identify a common free-space pool, and generic backing thin-pool independence is unqualified; Real mounted bind/casefold/Btrfs pool/project-quota qualification and power-loss tests are distinct from bounded parsed-observation and process-fault fixtures; Stable archive chunking, complete names/metadata and larger-index qualification, Windows/macOS worker containment, S3, maintenance/replication, copy/mirror/sync, snapshots, cluster/UI, databases/imaging, security/performance soaks and installers remain required; all enabled archive jobs and full system acceptance stay gated"
+        },
+        {
+            "name": "Conservative node-wide destination and staging capacity reservations",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/destination_growth.json"
+            ],
+            "limits": "One canonical node authority, protected roots and cooperating bounded writers; arbitrary external filesystem consumption and unverified backing thin pools are not covered; Node-wide bucket deliberately overcounts independent volumes and already-written bytes; partitioned filesystem/project-quota capacity domains and real Btrfs mounted-pool qualification remain open; Trusted raw journal and inventory APIs do not establish physical identity, scope exclusion or coordinator ownership themselves; production wrappers supply those proofs; Blocking parent metadata/statvfs calls are not yet isolated; logical ciphertext/write charges are distinct from complete filesystem block/inode/write-amplification qualification; Complete startup census, source-view lifetime, cleanup/credits, journal record retirement, reboot/namespace rebasing and stable chunking remain incomplete; Other selected platform containment, S3, full replication/maintenance, copy/mirror/sync, snapshots, cluster/UI, databases/imaging, power-loss/security/performance soaks and installers remain required; full goal incomplete and enabled jobs gated"
         }
     ],
     "last_goal_turn": {
-        "classification": "progress",
-        "result": "Implemented schema9 local gateway journal with hash-bound effectivepolicy, immutable admission epoch/fence, ordered max3executions, concurrent uniqueness, correlated atomicreceipts and blockedresource recovery. Added strict physical native snapshot census and explicitfullID reading withaggregate byte/metadata limits. All214 tests pass zeroignored; fullpeak770.6M/no swap. Clippy331.4M anddefaultcheck250.8M pass. Precedingf5a nativeCI Linux/Windows pass, macOS quotafixturefailedbeforeexecution dueancestor alias; canonicalizedfixture, freshnativeverificationpending. Nextphysicalgateway_worker source isunwiredWIP, notqualifiedpublication. Fullgoalactive."
+        "classification": "paused_at_requested_milestone",
+        "result": "Committed and pushed c2d2024 capacity reservation milestone. All269 local tests pass zeroignored; feature Clippy, default build, fmt and whitespace pass inside enforced1GiB/high768MiB/swap0. Remote feature SHA/default master verified; master e9a4960 unchanged. Native CI42978584850 queued at pause. README edit and live goal checkpoint remain uncommitted. Full-system goal incomplete; no following milestone started. User requested stopping at this milestone."
     },
     "remote_checkpoint": {
-        "commit": "f5a844167109e7ee86cc16e60921c0e598ef069a",
+        "commit": "c2d20242bcffe26a07750f3873b3a0eb34cf61bb",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42870030771,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42870030771",
-        "status": "completed_with_macos_fixture_failure",
+        "native_ci_run_id": 42978584850,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42978584850",
+        "status": "queued_at_pause",
         "push_transport": "existing authorized SSH credential",
-        "results": {
-            "linux-x86_64": "success",
-            "windows-x86_64": "success",
-            "macos-arm64": "failure: strict fixture endpoint resolution saw macOS temporary ancestor alias"
-        }
+        "remote_sha_verified": true,
+        "primary_branch_preserved": "e9a496080bd67ea6eae4a8c4dff06e8f5568ac3e",
+        "remote_default_head": "master"
     },
     "prior_native_checkpoint": {
-        "commit": "1bf9a0ce12b5d83fc8a7d5a6bde0695f20727d19",
+        "commit": "36be96cf2e7b05d470ff4d58852a5fad5a9938e3",
         "branch": "implementation/relic-full-system",
-        "native_ci_run_id": 42866870779,
-        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42866870779",
+        "native_ci_run_id": 42912238791,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42912238791",
         "status": "completed_successfully",
         "push_transport": "existing authorized SSH credential",
         "results": {
@@ -993,6 +1051,71 @@
                 "windows-x86_64": "success",
                 "macos-arm64": "success"
             }
+        },
+        {
+            "commit": "1bf9a0ce12b5d83fc8a7d5a6bde0695f20727d19",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42866870779,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42866870779",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "f5a844167109e7ee86cc16e60921c0e598ef069a",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42870030771,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42870030771",
+            "status": "completed_with_macos_fixture_failure",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "failure: strict fixture endpoint resolution saw macOS temporary ancestor alias"
+            }
+        },
+        {
+            "commit": "b9a7a8373913e4df1cf9184aa5341cae179b9bd0",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42876542042,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42876542042",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "3cde2f8fe73edd550945ace4cebf3c8c3fb18804",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42888873544,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42888873544",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "73454941316d06010886c55a436fd3622c377156",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42895779834,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42895779834",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
         }
     ],
     "failure_controls": {
@@ -1074,7 +1197,105 @@
             "corrective_cycles": 1,
             "max_corrective_cycles": 2,
             "correction": "Canonicalize only the owned test root before strict endpoint resolution; preserve endpoint identity validation",
-            "status": "awaiting_fresh_native_verification"
+            "status": "resolved",
+            "verification_run": 42876542042,
+            "corrective_commit": "b9a7a8373913e4df1cf9184aa5341cae179b9bd0"
+        },
+        "gateway_bind_mount_scope": {
+            "observed_error": "Initializer rejected legitimate /tmp bind mount vs home executable as AMBIGUOUS_SCOPE before launch",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Bounded kernel mount-origin proof preserves hidden bind ancestor overlap checks and permits proven native disjoint origins",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "gateway_worker_protocol_names": {
+            "observed_error": "Protocol fixture rejected initialize because snake_case splits uppercase enum letters",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Use lowercase serialization for uppercase operation members, retaining inspect_initialization underscore",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "gateway_concurrent_scope_reaper": {
+            "observed_error": "Live worker quiescence returned false when its trusted runtime reaper removed original scope concurrently",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Pin original events before kill; require offline original plus absent path on concurrent removal",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "gateway_initialization_clippy": {
+            "observed_error": "Warnings-denied Clippy rejected query tuple complexity, nested if and needless return",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Named execution query row and behavior-preserving local lint normalization",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "native_scope_clippy": {
+            "observed_error": "Warnings-denied Clippy rejected nested scope-quiescence if",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Equivalent let-chain; final full regression and Clippy pass",
+            "status": "resolved",
+            "verification": "docs/evidence/native_worker_scopes.json"
+        },
+        "physical_registry_source_free_recovery": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Global fresh admission reread intentionally removed source roots during existing native and gateway verification",
+            "correction": "Verification validates immutable already-admitted own state/executable/destination scopes and exact retained native staging charge; fresh effects still require full registry admission",
+            "status": "resolved",
+            "verification": "259-test final full suite"
+        },
+        "physical_registry_orphan_scope_fixture": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic orphan fixture bypassed normal executable-root admission before recording running operation",
+            "correction": "Register production recovery executable parent before synthetic start; preserve scope-exclusion assertions",
+            "status": "resolved",
+            "verification": "259-test final full suite"
+        },
+        "physical_registry_clippy_complexity": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Bounded observation helper tuple exceeded type-complexity lint",
+            "correction": "Name the validated ObservationPaths tuple type",
+            "status": "resolved",
+            "verification": "physical-registry-clippy-final.log"
+        },
+        "physical_registry_manual_staging_restore_fixtures": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic native staging and restore prepared-intent fixtures bypassed new physical admission",
+            "correction": "Record actual target/root admission before direct journal preparation; preserve no-worker and no-effect assertions",
+            "status": "resolved",
+            "verification": "259-test final full suite"
+        },
+        "growth_scope_recovery_fixtures": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic old journal rewinds and orphan setup omitted newly coupled growth/scratch obligations",
+            "correction": "Model atomic hold rollback and production-equivalent existing scratch/growth charges",
+            "status": "resolved",
+            "verification": "269-test full run"
+        },
+        "growth_orphan_descriptor_lifetime": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic orphan marker missing after adding a retained scratch endpoint descriptor to32-FD fixture",
+            "correction": "Drop unneeded scratch endpoint before constrained launch",
+            "status": "resolved",
+            "verification": "Focused orphan plus269-test full run"
+        },
+        "growth_writable_replay_inventory": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Exact charged writable replay initially omitted closed destination inventory gate",
+            "correction": "Both gates checked for replay; bounded recovery cannot create/change an existing scratch charge; no duplicate full-budget readmission",
+            "status": "resolved",
+            "verification": "Closed-gate replay, legacy coverage, concurrency and269-test full run"
         }
     },
     "preserved_worktree_changes": [
@@ -1082,5 +1303,33 @@
             "path": "README.md",
             "description": "Concurrent implementation-branch CI badge edit appeared during this milestone; preserved and excluded from scoped commit."
         }
-    ]
+    ],
+    "next_safety_gates": [
+        {
+            "name": "Private native-run recorded scopes",
+            "plan": "Schema12 scope_protocol + operation_token + worker_identity; bind exact running operation before fork; running->unknown revokes late callback; quiesce recorded create/verifier before owner probe. Legacy running/unknown unrecorded scopes fail closed. Token-qualified completion and unknown transitions. Native workers verify current scope before credentials; preserve source-free recovery and existing attempt/failure caps."
+        },
+        {
+            "name": "Canonical conflict domains",
+            "plan": "One node authority registers all owned roots and gateway resource origins before effects; exclude physical aliases, hidden bind prefixes, nested and cross-volume namespace overlap. Exact inode uniqueness alone is insufficient. Revalidate stored roots and serialize admissions; preserve unknown/replacement states."
+        },
+        {
+            "name": "Destination capacity reservations",
+            "plan": "Atomic per-volume outstanding write-growth reservations separate from retained final repository bytes and staging quota; preserve unknown workers and in-flight effects across restart. Do not charge final retained backup bytes as staging."
+        },
+        {
+            "name": "Durable cleanup pins and credits",
+            "plan": "Retain private source and scratch ownership until all accepted publications and old worker scopes resolve; safe physical inventory and no recursive unknown cleanup. Success sorter empty-directory cleanup needs pinned ownership and exclusion; no premature staging credits."
+        },
+        {
+            "name": "Stable file-archive chunking",
+            "plan": "Gateway authenticates target chunker parameters; initialize fresh private stage with compatible config, distinct repository ID and independent credentials. init_with_config lacks existing-config protection, so strict empty/exclusive stage intent is mandatory. Persist config evidence; bounded high-entropy unchanged/sparse-edit fixture measures data blob reuse. Committed-snapshot replication keeps separate exact-source provenance."
+        }
+    ],
+    "stop_request": {
+        "target": "Next tested, committed and pushed durable capacity reservation milestone",
+        "action": "Pause the full goal after this milestone; do not start the following milestone",
+        "status": "fulfilled",
+        "completed_milestone_commit": "c2d20242bcffe26a07750f3873b3a0eb34cf61bb"
+    }
 }
