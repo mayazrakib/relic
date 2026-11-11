@@ -538,7 +538,7 @@ fn legacy_inventory_requires_coverage_of_all_existing_owned_roots() {
     drop(state);
     let db = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
     db.execute_batch(
-        "DROP TABLE physical_roots; DROP TABLE physical_registry_meta; PRAGMA user_version=12;",
+        "DROP TABLE destination_growth; DROP TABLE destination_growth_metadata; DROP TABLE physical_roots; DROP TABLE physical_registry_meta; PRAGMA user_version=12;",
     )
     .unwrap();
     drop(db);

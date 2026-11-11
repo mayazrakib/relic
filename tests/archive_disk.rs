@@ -1183,6 +1183,10 @@ fn gateway_publication_recovers_and_retries_only_after_strict_negative_proof() {
     assert_eq!(receipt["repository_id"], repository_id);
     assert_eq!(receipt["manifest_digest"], fixture.expected.digest);
     assert_eq!(receipt["verification"], "data_verified");
+    assert_eq!(
+        fixture.state.get_total_held_destination_growth().unwrap(),
+        0
+    );
     let first_snapshot = receipt["native_result_id"].as_str().unwrap().to_owned();
     assert_eq!(first_snapshot.len(), 64);
 
@@ -1199,9 +1203,27 @@ fn gateway_publication_recovers_and_retries_only_after_strict_negative_proof() {
         .state
         .admit_gateway_publication(&second, 1, 1)
         .unwrap();
+    let growth = relic::volume_budget::GrowthBinding {
+        operation_kind: "copy".into(),
+        operation_id: "admission_2".into(),
+        ordinal: 1,
+        resource_id: "gateway_resource".into(),
+        storage_identity: gateway.storage_identity().into(),
+        volume_identity: format!("unix:{}", fs::metadata(&target).unwrap().dev()),
+        receiver_epoch: 1,
+        fence_generation: 1,
+        max_bytes: gateway_context.repository_max_bytes,
+    };
     fixture
         .state
-        .start_gateway_execution("admission_2", 1, 1)
+        .start_gateway_execution_with_growth(
+            "admission_2",
+            1,
+            1,
+            &growth,
+            16 * 1024 * 1024 * 1024,
+            16 * 1024 * 1024 * 1024,
+        )
         .unwrap();
     let corrupt = target.join("snapshots").join("f".repeat(64));
     assert!(!corrupt.exists());
@@ -1255,7 +1277,7 @@ fn gateway_publication_recovers_and_retries_only_after_strict_negative_proof() {
 
     // Model a crash after native publication but before the first receipt was persisted.
     let database = rusqlite::Connection::open(state_dir.join("state.sqlite3")).unwrap();
-    database.execute_batch("BEGIN IMMEDIATE; UPDATE publication_intents SET effect_state='unknown',native_result_id=NULL,receipt=NULL WHERE commit_key=(SELECT commit_key FROM gateway_admissions WHERE admission_id='admission_1'); UPDATE gateway_executions SET effect_state='unknown',native_result_id=NULL WHERE admission_id='admission_1' AND ordinal=1; COMMIT;").unwrap();
+    database.execute_batch("BEGIN IMMEDIATE; UPDATE publication_intents SET effect_state='unknown',native_result_id=NULL,receipt=NULL WHERE commit_key=(SELECT commit_key FROM gateway_admissions WHERE admission_id='admission_1'); UPDATE gateway_executions SET effect_state='unknown',native_result_id=NULL WHERE admission_id='admission_1' AND ordinal=1; UPDATE destination_growth SET effect_state='held' WHERE operation_kind='copy' AND operation_id='admission_1' AND ordinal=1; COMMIT;").unwrap();
     drop(database);
     fs::remove_dir_all(&native_root).unwrap();
     fs::remove_dir_all(&archive_dir).unwrap();
@@ -1267,6 +1289,10 @@ fn gateway_publication_recovers_and_retries_only_after_strict_negative_proof() {
         .unwrap()
         .unwrap();
     assert_eq!(recovered["native_result_id"], first_snapshot);
+    assert_eq!(
+        fixture.state.get_total_held_destination_growth().unwrap(),
+        0
+    );
     assert_eq!(recovered["manifest_digest"], fixture.expected.digest);
     assert_eq!(
         fs::read_dir(target.join("snapshots")).unwrap().count(),

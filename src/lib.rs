@@ -44,6 +44,7 @@ pub mod service;
 pub mod source_scan;
 pub mod staging_quota;
 pub mod state;
+pub mod volume_budget;
 pub mod worker_identity;
 pub mod worker_runtime;
 pub mod worker_state;

@@ -583,6 +583,16 @@ mod linux {
             .map_err(|_| WorkerProtocolError::INVALID)?;
         let state = StateStore::open_readonly(&request.state_dir)
             .map_err(|_| WorkerProtocolError::STATE)?;
+        if !state
+            .is_staging_quota_inventory_complete()
+            .map_err(|_| WorkerProtocolError::STATE)?
+            || !state
+                .is_destination_growth_inventory_complete()
+                .map_err(|_| WorkerProtocolError::STATE)?
+        {
+            return Err(WorkerProtocolError::STATE);
+        }
+
         let run = state
             .get_native_run(&request.run_id)
             .map_err(|_| WorkerProtocolError::STATE)?

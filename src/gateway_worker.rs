@@ -1112,6 +1112,36 @@ mod linux {
         {
             return Err(Error::STATE);
         }
+        let (growth_kind, growth_id, growth_ordinal) = match request.operation {
+            Operation::INITIALIZE | Operation::INSPECT_INITIALIZATION => {
+                ("initialization", request.resource_id.as_str(), 0)
+            }
+            Operation::COPY | Operation::VERIFY => (
+                "copy",
+                request.admission_id.as_deref().ok_or(Error::STATE)?,
+                request.execution_ordinal.ok_or(Error::STATE)?,
+            ),
+        };
+        let growth = state
+            .get_destination_growth(growth_kind, growth_id, growth_ordinal)
+            .map_err(|_| Error::STATE)?
+            .ok_or(Error::STATE)?;
+        if !state
+            .is_staging_quota_inventory_complete()
+            .map_err(|_| Error::STATE)?
+            || !state
+                .is_destination_growth_inventory_complete()
+                .map_err(|_| Error::STATE)?
+            || growth.effect_state != "held"
+            || growth.binding.resource_id != request.resource_id
+            || growth.binding.storage_identity != resource.binding.storage_identity
+            || growth.binding.volume_identity != format!("unix:{}", root.identity().device)
+            || growth.binding.receiver_epoch != request.receiver_epoch
+            || growth.binding.fence_generation != request.fence_generation
+            || growth.binding.max_bytes != request.repository_max_bytes
+        {
+            return Err(Error::STATE);
+        }
         let layout = state
             .get_gateway_layout(&request.resource_id)
             .map_err(|_| Error::STATE)?

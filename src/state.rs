@@ -14,7 +14,7 @@ use crate::staging_quota::{
 };
 
 const INITIALIZATION_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
-const CURRENT_SCHEMA_VERSION: u32 = 13;
+const CURRENT_SCHEMA_VERSION: u32 = 14;
 
 #[derive(Debug)]
 pub enum StateError {
@@ -602,6 +602,12 @@ impl StateStore {
         if version <= 12 {
             transaction.execute_batch(include_str!(
                 "../database/migrations/00013_physical_roots.sql"
+            ))?;
+        }
+
+        if version <= 13 {
+            transaction.execute_batch(include_str!(
+                "../database/migrations/00014_destination_growth.sql"
             ))?;
         }
 
@@ -2213,8 +2219,15 @@ impl StateStore {
         {
             return Err(StateError::IdempotencyConflict);
         }
-        if !is_inventory && !inventory_complete {
-            return Err(StateError::InventoryRequired);
+        if !is_inventory {
+            let growth_ready: bool = transaction.query_row(
+                "SELECT inventory_complete FROM destination_growth_metadata WHERE singleton=1",
+                [],
+                |r| r.get(0),
+            )?;
+            if !inventory_complete || !growth_ready {
+                return Err(StateError::InventoryRequired);
+            }
         }
         if is_inventory && inventory_complete && existing.is_none() {
             return Err(StateError::EffectConflict);
@@ -2241,18 +2254,18 @@ impl StateStore {
             if new_total > MAX_STAGING_BYTES {
                 return Err(StateError::QuotaExceeded);
             }
-            let (volume_total, _) =
-                get_staging_totals(&transaction, Some(&binding.volume_identity))?;
-            let volume_total = volume_total
-                .checked_add(additional)
-                .ok_or(StateError::QuotaExceeded)?;
-            let reserve = MIN_FREE_BYTES.max(capacity_bytes.div_ceil(20));
-            if volume_total
-                .checked_add(reserve)
-                .is_none_or(|required| required > available_bytes)
-            {
-                return Err(StateError::QuotaExceeded);
+            if existing.is_none() {
+                // One conservative node-wide pool also covers shared Btrfs space.
+                let growth = crate::volume_budget::get_total_held_growth(&transaction)?;
+                let required = new_total
+                    .checked_add(growth)
+                    .and_then(|v| v.checked_add(MIN_FREE_BYTES.max(capacity_bytes.div_ceil(20))));
+                if required.is_none_or(|v| v > available_bytes) {
+                    return Err(StateError::QuotaExceeded);
+                }
             }
+            // Exact replay retains its existing charge. Re-admitting it against
+            // lower free space could prevent verification from resolving a hold.
         }
         if let Some(existing) = existing {
             transaction.commit()?;

@@ -472,8 +472,11 @@ impl NativeRunStore {
                 .map_err(|_| NativeRunError::STATE)?
                 .ok_or(NativeRunError::RECONCILIATION_REQUIRED)?;
             if !state
-                .is_staging_quota_inventory_complete()
+                .is_destination_growth_inventory_complete()
                 .map_err(|_| NativeRunError::STATE)?
+                || !state
+                    .is_staging_quota_inventory_complete()
+                    .map_err(|_| NativeRunError::STATE)?
                 || saved.binding.storage_endpoint_id != record.binding.storage_endpoint_id
                 || saved.binding.storage_identity != record.binding.storage_identity
                 || saved.binding.volume_identity

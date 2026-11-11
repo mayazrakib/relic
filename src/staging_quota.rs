@@ -66,8 +66,20 @@ pub fn reserve_owned_staging_quota(
     endpoint
         .revalidate()
         .map_err(|_| StateError::EffectConflict)?;
+    // Fresh capacity and its journal admission share the same pinned node lock
+    // with destination growth admission and release.
+    #[cfg(target_os = "linux")]
+    let capacity_guard = crate::physical_registry::acquire_capacity_guard(
+        state,
+        &crate::resources::StageGuard::default(),
+    )
+    .map_err(|_| StateError::EffectConflict)?;
     let capacity = endpoint
         .capacity()
+        .map_err(|_| StateError::EffectConflict)?;
+    #[cfg(target_os = "linux")]
+    capacity_guard
+        .check(state, &crate::resources::StageGuard::default())
         .map_err(|_| StateError::EffectConflict)?;
     state.reserve_staging_quota(binding, capacity.capacity_bytes, capacity.available_bytes)
 }

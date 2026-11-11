@@ -265,7 +265,7 @@ fn paginates_pending_and_migrates_schema_six() {
     drop(store);
     let connection = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
     connection
-        .execute_batch("DROP TABLE physical_roots; DROP TABLE physical_registry_meta; DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; DROP TABLE native_runs; PRAGMA user_version = 6;")
+        .execute_batch("DROP TABLE destination_growth; DROP TABLE destination_growth_metadata; DROP TABLE physical_roots; DROP TABLE physical_registry_meta; DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; DROP TABLE native_runs; PRAGMA user_version = 6;")
         .unwrap();
     drop(connection);
     let store = StateStore::open(&path).unwrap();
@@ -385,7 +385,7 @@ fn migration_keeps_legacy_running_scope_explicitly_unrecorded() {
     store.mark_native_unknown("run_2").unwrap();
     drop(store);
     let db = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
-    db.execute_batch("DROP TABLE physical_roots; DROP TABLE physical_registry_meta; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version=11;").unwrap();
+    db.execute_batch("DROP TABLE destination_growth; DROP TABLE destination_growth_metadata; DROP TABLE physical_roots; DROP TABLE physical_registry_meta; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version=11;").unwrap();
     drop(db);
     let mut store = StateStore::open(&path).unwrap();
     let legacy = store.get_native_run("run_1").unwrap().unwrap();

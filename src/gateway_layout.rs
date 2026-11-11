@@ -240,6 +240,42 @@ impl StateStore {
         epoch: u64,
         fence: u64,
     ) -> Result<GatewayLayoutRecord, StateError> {
+        self.start_gateway_initialization_inner(id, epoch, fence, None)
+    }
+    /// The caller holds the node coordinator across the capacity sample and commit.
+    pub fn start_gateway_initialization_with_growth(
+        &mut self,
+        id: &str,
+        epoch: u64,
+        fence: u64,
+        binding: &crate::volume_budget::GrowthBinding,
+        capacity: u64,
+        available: u64,
+    ) -> Result<GatewayLayoutRecord, StateError> {
+        self.start_gateway_initialization_inner(
+            id,
+            epoch,
+            fence,
+            Some((binding, capacity, available)),
+        )
+    }
+    fn start_gateway_initialization_inner(
+        &mut self,
+        id: &str,
+        epoch: u64,
+        fence: u64,
+        growth: Option<(&crate::volume_budget::GrowthBinding, u64, u64)>,
+    ) -> Result<GatewayLayoutRecord, StateError> {
+        if let Some((binding, _, _)) = growth
+            && (binding.operation_kind != "initialization"
+                || binding.operation_id != id
+                || binding.resource_id != id
+                || binding.ordinal != 0
+                || binding.receiver_epoch != epoch
+                || binding.fence_generation != fence)
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -254,6 +290,9 @@ impl StateStore {
             return Err(StateError::EffectConflict);
         }
         tx.execute("UPDATE gateway_layouts SET effect_state='initializing',initialization_attempts=1,launch_protocol=1,initialization_epoch=?1,initialization_fence=?2 WHERE resource_id=?3",params![epoch.to_string(),fence.to_string(),id])?;
+        if let Some((binding, capacity, available)) = growth {
+            crate::volume_budget::reserve_growth_in_transaction(&tx, binding, capacity, available)?;
+        }
         let result = read_layout(&tx, id)?.ok_or(StateError::EffectConflict)?;
         tx.commit()?;
         Ok(result)
@@ -369,6 +408,37 @@ impl StateStore {
         fence: u64,
         repository_id: &str,
     ) -> Result<GatewayLayoutRecord, StateError> {
+        self.complete_gateway_initialization_inner(id, epoch, fence, repository_id, None)
+    }
+    /// The caller holds the node coordinator and has proved the mutating scope quiescent.
+    pub fn complete_gateway_initialization_with_growth(
+        &mut self,
+        id: &str,
+        epoch: u64,
+        fence: u64,
+        repository_id: &str,
+        binding: &crate::volume_budget::GrowthBinding,
+    ) -> Result<GatewayLayoutRecord, StateError> {
+        self.complete_gateway_initialization_inner(id, epoch, fence, repository_id, Some(binding))
+    }
+    fn complete_gateway_initialization_inner(
+        &mut self,
+        id: &str,
+        epoch: u64,
+        fence: u64,
+        repository_id: &str,
+        growth: Option<&crate::volume_budget::GrowthBinding>,
+    ) -> Result<GatewayLayoutRecord, StateError> {
+        if let Some(binding) = growth
+            && (binding.operation_kind != "initialization"
+                || binding.operation_id != id
+                || binding.resource_id != id
+                || binding.ordinal != 0
+                || binding.receiver_epoch != epoch
+                || binding.fence_generation != fence)
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
         if repository_id.len() != 64
             || !repository_id
                 .bytes()
@@ -392,6 +462,9 @@ impl StateStore {
             {
                 return Err(StateError::IdempotencyConflict);
             }
+            if let Some(binding) = growth {
+                crate::volume_budget::release_growth_in_transaction(&tx, binding)?;
+            }
             tx.commit()?;
             return Ok(record);
         }
@@ -409,6 +482,9 @@ impl StateStore {
             "UPDATE gateway_layouts SET effect_state='initialized' WHERE resource_id=?1",
             [id],
         )?;
+        if let Some(binding) = growth {
+            crate::volume_budget::release_growth_in_transaction(&tx, binding)?;
+        }
         let result = read_layout(&tx, id)?.ok_or(StateError::EffectConflict)?;
         tx.commit()?;
         Ok(result)

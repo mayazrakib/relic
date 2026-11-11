@@ -293,6 +293,7 @@ fn initializes_and_recovers_completed_native_repository_after_store_restart() {
     };
     let resource = store.initialize(&mut state, "resource", &context).unwrap();
     assert_eq!(resource.effect_state, "ready");
+    assert_eq!(state.get_total_held_destination_growth().unwrap(), 0);
     let repository_id = resource.repository_id.clone().unwrap();
     assert_eq!(repository_id.len(), 64);
     assert!(
@@ -318,7 +319,7 @@ fn initializes_and_recovers_completed_native_repository_after_store_restart() {
     drop(store);
     drop(state);
     let connection = rusqlite::Connection::open(state_dir.join("state.sqlite3")).unwrap();
-    connection.execute_batch("BEGIN IMMEDIATE; UPDATE gateway_resources SET effect_state='prepared',repository_id=NULL WHERE resource_id='resource'; UPDATE gateway_layouts SET effect_state='unknown' WHERE resource_id='resource'; COMMIT;").unwrap();
+    connection.execute_batch("BEGIN IMMEDIATE; UPDATE gateway_resources SET effect_state='prepared',repository_id=NULL WHERE resource_id='resource'; UPDATE gateway_layouts SET effect_state='unknown' WHERE resource_id='resource'; UPDATE destination_growth SET effect_state='held' WHERE operation_kind='initialization' AND operation_id='resource'; COMMIT;").unwrap();
     drop(connection);
     let mut state = StateStore::open(&state_dir).unwrap();
     let root = directory.path().join("target");
@@ -327,6 +328,7 @@ fn initializes_and_recovers_completed_native_repository_after_store_restart() {
         .reconcile_initialization(&mut state, "resource", &context)
         .unwrap();
     assert_eq!(recovered.effect_state, "ready");
+    assert_eq!(state.get_total_held_destination_growth().unwrap(), 0);
     assert_eq!(
         recovered.repository_id.as_deref(),
         Some(repository_id.as_str())
@@ -364,8 +366,48 @@ fn recovery_quiesces_recorded_orphan_before_probing_owner_lock() {
         &guard,
     )
     .unwrap();
+    let scratch = get_endpoint(&directory.path().join("target/.relic-scratch"));
+    relic::staging_quota::reserve_owned_staging_quota(
+        &mut state,
+        &scratch,
+        &relic::staging_quota::StagingQuotaBinding {
+            object_kind: "gateway_scratch".into(),
+            object_id: "resource".into(),
+            storage_endpoint_id: binding.storage_endpoint_id.clone(),
+            storage_identity: format!(
+                "unix:{}:{}",
+                scratch.identity().device,
+                scratch.identity().inode
+            ),
+            volume_identity: format!("unix:{}", scratch.identity().device),
+            max_bytes: 8 * 1024 * 1024,
+        },
+    )
+    .unwrap();
+    drop(scratch);
+    let growth = relic::volume_budget::GrowthBinding {
+        operation_kind: "initialization".into(),
+        operation_id: "resource".into(),
+        ordinal: 0,
+        resource_id: "resource".into(),
+        storage_identity: binding.storage_identity.clone(),
+        volume_identity: format!(
+            "unix:{}",
+            fs::metadata(directory.path().join("target")).unwrap().dev()
+        ),
+        receiver_epoch: 1,
+        fence_generation: 1,
+        max_bytes: 32 * 1024 * 1024,
+    };
     state
-        .start_gateway_initialization("resource", 1, 1)
+        .start_gateway_initialization_with_growth(
+            "resource",
+            1,
+            1,
+            &growth,
+            16 * 1024 * 1024 * 1024,
+            16 * 1024 * 1024 * 1024,
+        )
         .unwrap();
     let target = directory.path().join("target");
     let state_dir = directory.path().join("state");
@@ -427,6 +469,10 @@ fn recovery_quiesces_recorded_orphan_before_probing_owner_lock() {
     // The orphan made no repository; inspection fails closed after quiescing it.
     let result = store.reconcile_initialization(&mut state, "resource", &context);
     assert!(matches!(result, Err(GatewayStoreError::OUTCOME_UNKNOWN)));
+    assert_eq!(
+        state.get_total_held_destination_growth().unwrap(),
+        growth.max_bytes
+    );
     let recorded = state
         .get_gateway_layout("resource")
         .unwrap()

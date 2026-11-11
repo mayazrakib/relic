@@ -60,10 +60,31 @@ fn reserves_once_and_preserves_abandoned_charge_after_restart() {
             .unwrap(),
         record
     );
+    // Replay acknowledges a charge already held; it cannot consume another permit
+    // or prevent low-space recovery from resolving the original operation.
+    assert_eq!(
+        store
+            .reserve_staging_quota(&binding, 4 * MAX_STAGING_BYTES, 0)
+            .unwrap(),
+        record
+    );
+    let db = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
+    db.execute(
+        "UPDATE destination_growth_metadata SET inventory_complete=0",
+        [],
+    )
+    .unwrap();
     assert!(matches!(
-        store.reserve_staging_quota(&binding, 4 * MAX_STAGING_BYTES, MIN_FREE_BYTES),
-        Err(StateError::QuotaExceeded)
+        store.reserve_staging_quota(&binding, 4 * MAX_STAGING_BYTES, 4 * MAX_STAGING_BYTES),
+        Err(StateError::InventoryRequired)
     ));
+    assert_eq!(store.get_staging_quota_usage().unwrap(), 100);
+    db.execute(
+        "UPDATE destination_growth_metadata SET inventory_complete=1",
+        [],
+    )
+    .unwrap();
+    drop(db);
     assert_eq!(store.get_staging_quota_usage().unwrap(), 100);
     let mut changed = binding.clone();
     changed.max_bytes = 101;
@@ -160,7 +181,7 @@ fn migration_blocks_until_trusted_inventory_is_complete() {
     let connection = rusqlite::Connection::open(path.join("state.sqlite3")).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE physical_roots; DROP TABLE physical_registry_meta; DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version = 7;",
+            "DROP TABLE destination_growth; DROP TABLE destination_growth_metadata; DROP TABLE physical_roots; DROP TABLE physical_registry_meta; DROP TABLE gateway_layouts; DROP TABLE gateway_executions; DROP TABLE gateway_admissions; DROP TABLE gateway_resources; DROP TABLE staging_quota; DROP TABLE staging_quota_metadata; ALTER TABLE native_runs DROP COLUMN worker_identity; ALTER TABLE native_runs DROP COLUMN operation_token; ALTER TABLE native_runs DROP COLUMN scope_protocol; PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
@@ -237,4 +258,56 @@ fn validates_owner_and_pages_without_unbounded_results() {
         "manifest_b"
     );
     assert!(store.list_staging_quota("", "", 0).is_err());
+}
+
+#[test]
+fn staging_admission_counts_destination_growth_on_a_different_observed_device() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut store = StateStore::open(&directory.path().join("state")).unwrap();
+    create_manifest(&mut store, "a", "alias_a", 11);
+    store
+        .prepare_gateway_resource(&relic::gateway_state::GatewayResourceBinding {
+            resource_id: "gateway".into(),
+            authority_id: "authority".into(),
+            storage_endpoint_id: "target".into(),
+            storage_identity: "unix:2:20".into(),
+            repository_key_ref: "key".into(),
+        })
+        .unwrap();
+    store.prepare_gateway_layout("gateway").unwrap();
+    store.bind_gateway_owner("gateway", "unix:2:21").unwrap();
+    store.bind_gateway_scratch("gateway", "unix:2:22").unwrap();
+    store.seal_gateway_layout("gateway").unwrap();
+    let growth = relic::volume_budget::GrowthBinding {
+        operation_kind: "initialization".into(),
+        operation_id: "gateway".into(),
+        ordinal: 0,
+        resource_id: "gateway".into(),
+        storage_identity: "unix:2:20".into(),
+        volume_identity: "unix:2".into(),
+        receiver_epoch: 1,
+        fence_generation: 1,
+        max_bytes: 128,
+    };
+    store
+        .start_gateway_initialization_with_growth(
+            "gateway",
+            1,
+            1,
+            &growth,
+            4 * MAX_STAGING_BYTES,
+            4 * MAX_STAGING_BYTES,
+        )
+        .unwrap();
+    let binding = get_binding("a", "alias_a", 11, 100);
+    assert!(matches!(
+        store.reserve_staging_quota(&binding, 4 * MAX_STAGING_BYTES, MIN_FREE_BYTES + 227),
+        Err(StateError::QuotaExceeded)
+    ));
+    assert_eq!(store.get_staging_quota_usage().unwrap(), 0);
+    store
+        .reserve_staging_quota(&binding, 4 * MAX_STAGING_BYTES, MIN_FREE_BYTES + 228)
+        .unwrap();
+    assert_eq!(store.get_staging_quota_usage().unwrap(), 100);
+    assert_eq!(store.get_total_held_destination_growth().unwrap(), 128);
 }

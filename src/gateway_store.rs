@@ -25,7 +25,6 @@ use crate::worker_runtime::{
 const MEMORY_BYTES: u64 = 192 * 1024 * 1024;
 const SCRATCH_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_REPOSITORY_BYTES: u64 = 512 * 1024 * 1024;
-const MIN_FREE_BYTES: u64 = 512 * 1024 * 1024;
 
 #[path = "gateway_publication.rs"]
 mod publication;
@@ -613,25 +612,52 @@ impl LocalGatewayStore {
         }
         Ok(())
     }
-    fn check_capacity(
+    fn get_growth_binding(
         &self,
+        resource: &GatewayResourceRecord,
+        kind: &str,
+        id: &str,
+        ordinal: u32,
         context: &GatewayExecutionContext<'_>,
+    ) -> crate::volume_budget::GrowthBinding {
+        crate::volume_budget::GrowthBinding {
+            operation_kind: kind.into(),
+            operation_id: id.into(),
+            ordinal,
+            resource_id: resource.binding.resource_id.clone(),
+            storage_identity: self.identity.clone(),
+            volume_identity: format!("unix:{}", self.endpoint.identity().device),
+            receiver_epoch: resource.receiver_epoch,
+            fence_generation: resource.fence_generation,
+            max_bytes: context.repository_max_bytes,
+        }
+    }
+
+    fn check_growth_hold(
+        &self,
+        state: &StateStore,
+        binding: &crate::volume_budget::GrowthBinding,
     ) -> Result<(), GatewayStoreError> {
-        let capacity = self
-            .endpoint
-            .capacity()
-            .map_err(|_| GatewayStoreError::CAPACITY)?;
-        let reserve = MIN_FREE_BYTES.max(capacity.capacity_bytes.div_ceil(20));
-        let needed = context
-            .repository_max_bytes
-            .checked_add(SCRATCH_BYTES)
-            .and_then(|v| v.checked_add(reserve))
-            .ok_or(GatewayStoreError::CAPACITY)?;
-        if capacity.available_bytes < needed {
-            return Err(GatewayStoreError::CAPACITY);
+        if !state
+            .is_destination_growth_inventory_complete()
+            .map_err(|_| GatewayStoreError::STATE)?
+        {
+            return Err(GatewayStoreError::RECONCILIATION_REQUIRED);
+        }
+        let saved = state
+            .get_destination_growth(
+                &binding.operation_kind,
+                &binding.operation_id,
+                binding.ordinal,
+            )
+            .map_err(|_| GatewayStoreError::STATE)?
+            .ok_or(GatewayStoreError::RECONCILIATION_REQUIRED)?;
+        if saved.binding != *binding || saved.effect_state != "held" {
+            return Err(GatewayStoreError::RECONCILIATION_REQUIRED);
         }
         Ok(())
     }
+
     pub fn initialize(
         &self,
         state: &mut StateStore,
@@ -665,7 +691,6 @@ impl LocalGatewayStore {
         if layout.effect_state == "initialized" && resource.effect_state == "ready" {
             return Ok(resource);
         }
-        self.check_capacity(context)?;
         if layout.effect_state != "ready" || resource.effect_state != "prepared" {
             return Err(GatewayStoreError::RECONCILIATION_REQUIRED);
         }
@@ -755,6 +780,17 @@ impl LocalGatewayStore {
         coordinator: &File,
         is_inspection: bool,
     ) -> Result<GatewayResourceRecord, GatewayStoreError> {
+        let growth = self.get_growth_binding(
+            resource,
+            "initialization",
+            &resource.binding.resource_id,
+            0,
+            context,
+        );
+        if is_inspection {
+            self.check_growth_hold(state, &growth)?;
+        }
+        self.reserve_scratch(state, resource, layout, is_inspection)?;
         let mut reservation = Some(
             context
                 .job
@@ -831,13 +867,32 @@ impl LocalGatewayStore {
                 .map_err(|_| GatewayStoreError::STORAGE)?,
         );
         if !is_inspection {
+            let capacity_guard =
+                crate::physical_registry::acquire_capacity_guard(state, context.guard)
+                    .map_err(|_| GatewayStoreError::BUSY)?;
+            let capacity = self
+                .endpoint
+                .capacity()
+                .map_err(|_| GatewayStoreError::CAPACITY)?;
+            capacity_guard
+                .check(state, context.guard)
+                .map_err(|_| GatewayStoreError::RECONCILIATION_REQUIRED)?;
             state
-                .start_gateway_initialization(
+                .start_gateway_initialization_with_growth(
                     &resource.binding.resource_id,
                     resource.receiver_epoch,
                     resource.fence_generation,
+                    &growth,
+                    capacity.capacity_bytes,
+                    capacity.available_bytes,
                 )
-                .map_err(|_| GatewayStoreError::STATE)?;
+                .map_err(|error| match error {
+                    crate::state::StateError::QuotaExceeded => GatewayStoreError::CAPACITY,
+                    crate::state::StateError::InventoryRequired => {
+                        GatewayStoreError::RECONCILIATION_REQUIRED
+                    }
+                    _ => GatewayStoreError::STATE,
+                })?;
         }
         let outcome = (|| {
             let output = execute_worker_recorded(
@@ -926,12 +981,25 @@ impl LocalGatewayStore {
                 .guard
                 .check()
                 .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
+            if let Some(identity) = &current.containment
+                && !quiesce_recorded_worker(identity, context.guard)
+                    .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?
+            {
+                return Err(GatewayStoreError::OUTCOME_UNKNOWN);
+            }
+            let capacity_guard =
+                crate::physical_registry::acquire_capacity_guard(state, context.guard)
+                    .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
+            capacity_guard
+                .check(state, context.guard)
+                .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
             state
-                .complete_gateway_initialization(
+                .complete_gateway_initialization_with_growth(
                     &resource.binding.resource_id,
                     resource.receiver_epoch,
                     resource.fence_generation,
                     &report.repository_id,
+                    &growth,
                 )
                 .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
             state

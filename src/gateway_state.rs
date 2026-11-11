@@ -432,6 +432,27 @@ impl StateStore {
         epoch: u64,
         fence: u64,
     ) -> Result<GatewayExecutionRecord, StateError> {
+        self.start_gateway_execution_inner(id, epoch, fence, None)
+    }
+    /// The caller holds the node coordinator across the capacity sample and commit.
+    pub fn start_gateway_execution_with_growth(
+        &mut self,
+        id: &str,
+        epoch: u64,
+        fence: u64,
+        binding: &crate::volume_budget::GrowthBinding,
+        capacity: u64,
+        available: u64,
+    ) -> Result<GatewayExecutionRecord, StateError> {
+        self.start_gateway_execution_inner(id, epoch, fence, Some((binding, capacity, available)))
+    }
+    fn start_gateway_execution_inner(
+        &mut self,
+        id: &str,
+        epoch: u64,
+        fence: u64,
+        growth: Option<(&crate::volume_budget::GrowthBinding, u64, u64)>,
+    ) -> Result<GatewayExecutionRecord, StateError> {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -452,7 +473,20 @@ impl StateStore {
             Some((n, state)) if state == "proven_unpublished" && n < 3 => n + 1,
             _ => return Err(StateError::EffectConflict),
         };
+        if let Some((binding, _, _)) = growth
+            && (binding.operation_kind != "copy"
+                || binding.operation_id != id
+                || binding.ordinal != ordinal
+                || binding.resource_id != item.binding.resource_id
+                || binding.receiver_epoch != epoch
+                || binding.fence_generation != fence)
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
         tx.execute("INSERT INTO gateway_executions(admission_id,ordinal,resource_id,receiver_epoch,fence_generation,effect_state) VALUES(?1,?2,?3,?4,?5,'active')",params![id,ordinal,item.binding.resource_id,epoch.to_string(),fence.to_string()])?;
+        if let Some((binding, capacity, available)) = growth {
+            crate::volume_budget::reserve_growth_in_transaction(&tx, binding, capacity, available)?;
+        }
         let result = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
         tx.commit()?;
         Ok(result)
@@ -581,12 +615,66 @@ impl StateStore {
         next: &str,
         native: Option<&str>,
     ) -> Result<GatewayExecutionRecord, StateError> {
+        self.transition_gateway_execution_inner(id, ordinal, epoch, fence, next, native, None)
+    }
+    /// Caller holds the node coordinator and has proved the mutating scope quiescent.
+    #[allow(clippy::too_many_arguments)]
+    pub fn transition_gateway_execution_with_growth(
+        &mut self,
+        id: &str,
+        ordinal: u32,
+        epoch: u64,
+        fence: u64,
+        next: &str,
+        native: Option<&str>,
+        binding: &crate::volume_budget::GrowthBinding,
+    ) -> Result<GatewayExecutionRecord, StateError> {
+        if next != "proven_unpublished" || native.is_some() {
+            return Err(StateError::InvalidInput);
+        }
+        self.transition_gateway_execution_inner(
+            id,
+            ordinal,
+            epoch,
+            fence,
+            next,
+            native,
+            Some(binding),
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn transition_gateway_execution_inner(
+        &mut self,
+        id: &str,
+        ordinal: u32,
+        epoch: u64,
+        fence: u64,
+        next: &str,
+        native: Option<&str>,
+        growth: Option<&crate::volume_budget::GrowthBinding>,
+    ) -> Result<GatewayExecutionRecord, StateError> {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let old = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
         let res = read_resource(&tx, &old.resource_id)?.ok_or(StateError::EffectConflict)?;
         check_epoch(&res, epoch, fence)?;
+        if let Some(binding) = growth {
+            if binding.operation_kind != "copy"
+                || binding.operation_id != id
+                || binding.ordinal != ordinal
+                || binding.resource_id != old.resource_id
+                || binding.receiver_epoch != epoch
+                || binding.fence_generation != fence
+            {
+                return Err(StateError::IdempotencyConflict);
+            }
+            if old.effect_state == "proven_unpublished" {
+                crate::volume_budget::release_growth_in_transaction(&tx, binding)?;
+                tx.commit()?;
+                return Ok(old);
+            }
+        }
         if !matches!(
             (old.effect_state.as_str(), next),
             ("active", "unknown")
@@ -615,6 +703,9 @@ impl StateStore {
         if next == "published_unverified" {
             tx.execute("UPDATE publication_intents SET effect_state='published',native_result_id=?1 WHERE commit_key=?2 AND effect_state IN ('admitted','unknown')",params![native,key])?;
         }
+        if let Some(binding) = growth {
+            crate::volume_budget::release_growth_in_transaction(&tx, binding)?;
+        }
         let result = read_execution(&tx, id, ordinal)?.ok_or(StateError::EffectConflict)?;
         tx.commit()?;
         Ok(result)
@@ -628,6 +719,31 @@ impl StateStore {
         fence: u64,
         receipt: &Value,
     ) -> Result<Value, StateError> {
+        self.record_gateway_receipt_inner(id, ordinal, epoch, fence, receipt, None)
+    }
+    /// Caller holds the node coordinator and has proved the mutating scope quiescent.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_gateway_receipt_with_growth(
+        &mut self,
+        id: &str,
+        ordinal: u32,
+        epoch: u64,
+        fence: u64,
+        receipt: &Value,
+        binding: &crate::volume_budget::GrowthBinding,
+    ) -> Result<Value, StateError> {
+        self.record_gateway_receipt_inner(id, ordinal, epoch, fence, receipt, Some(binding))
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn record_gateway_receipt_inner(
+        &mut self,
+        id: &str,
+        ordinal: u32,
+        epoch: u64,
+        fence: u64,
+        receipt: &Value,
+        growth: Option<&crate::volume_budget::GrowthBinding>,
+    ) -> Result<Value, StateError> {
         crate::contracts::validate_record(receipt).map_err(|_| StateError::InvalidInput)?;
         let tx = self
             .connection
@@ -636,6 +752,16 @@ impl StateStore {
         let item = read_admission(&tx, id)?.ok_or(StateError::EffectConflict)?;
         let res = read_resource(&tx, &old.resource_id)?.ok_or(StateError::EffectConflict)?;
         check_epoch(&res, epoch, fence)?;
+        if let Some(binding) = growth
+            && (binding.operation_kind != "copy"
+                || binding.operation_id != id
+                || binding.ordinal != ordinal
+                || binding.resource_id != old.resource_id
+                || binding.receiver_epoch != epoch
+                || binding.fence_generation != fence)
+        {
+            return Err(StateError::IdempotencyConflict);
+        }
         if old.effect_state == "verified" {
             let existing: Option<String> = tx.query_row(
                 "SELECT receipt FROM publication_intents WHERE commit_key=?1 AND effect_state='verified'",
@@ -645,6 +771,9 @@ impl StateStore {
                 serde_json::from_str(existing.as_deref().ok_or(StateError::EffectConflict)?)?;
             if existing != *receipt {
                 return Err(StateError::IdempotencyConflict);
+            }
+            if let Some(binding) = growth {
+                crate::volume_budget::release_growth_in_transaction(&tx, binding)?;
             }
             tx.commit()?;
             return Ok(existing);
@@ -695,6 +824,9 @@ impl StateStore {
             params![serde_json::to_string(receipt)?, key],
         )?;
         tx.execute("UPDATE gateway_executions SET effect_state='verified' WHERE admission_id=?1 AND ordinal=?2",params![id,ordinal])?;
+        if let Some(binding) = growth {
+            crate::volume_budget::release_growth_in_transaction(&tx, binding)?;
+        }
         tx.commit()?;
         Ok(receipt.clone())
     }

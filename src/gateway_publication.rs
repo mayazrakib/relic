@@ -53,11 +53,12 @@ impl LocalGatewayStore {
             .ok_or(GatewayStoreError::STATE)
     }
 
-    fn reserve_scratch(
+    pub(super) fn reserve_scratch(
         &self,
         state: &mut StateStore,
         resource: &GatewayResourceRecord,
         layout: &GatewayLayoutRecord,
+        is_recovery: bool,
     ) -> Result<(), GatewayStoreError> {
         let scratch = resolve_endpoint(&self.root.join(".relic-scratch"))?;
         let identity = scratch.identity();
@@ -66,19 +67,43 @@ impl LocalGatewayStore {
         {
             return Err(GatewayStoreError::STORAGE);
         }
-        reserve_owned_staging_quota(
-            state,
-            &scratch,
-            &StagingQuotaBinding {
-                object_kind: "gateway_scratch".into(),
-                object_id: resource.binding.resource_id.clone(),
-                storage_endpoint_id: self.endpoint_id.clone(),
-                storage_identity: format!("unix:{}:{}", identity.device, identity.inode),
-                volume_identity: format!("unix:{}", identity.device),
-                max_bytes: SCRATCH_BYTES,
-            },
-        )
-        .map_err(|_| GatewayStoreError::CAPACITY)?;
+        let binding = StagingQuotaBinding {
+            object_kind: "gateway_scratch".into(),
+            object_id: resource.binding.resource_id.clone(),
+            storage_endpoint_id: self.endpoint_id.clone(),
+            storage_identity: format!("unix:{}:{}", identity.device, identity.inode),
+            volume_identity: format!("unix:{}", identity.device),
+            max_bytes: SCRATCH_BYTES,
+        };
+        if is_recovery {
+            // The caller excluded old scopes and owns this resource. Recovery may
+            // spend only its already-held aggregate scratch budget, not mint one.
+            let saved = state
+                .get_staging_quota("gateway_scratch", &resource.binding.resource_id)
+                .map_err(|_| GatewayStoreError::STATE)?
+                .ok_or(GatewayStoreError::RECONCILIATION_REQUIRED)?;
+            if saved.binding != binding
+                || !state
+                    .is_staging_quota_inventory_complete()
+                    .map_err(|_| GatewayStoreError::STATE)?
+                || !state
+                    .is_destination_growth_inventory_complete()
+                    .map_err(|_| GatewayStoreError::STATE)?
+            {
+                return Err(GatewayStoreError::RECONCILIATION_REQUIRED);
+            }
+        } else {
+            reserve_owned_staging_quota(state, &scratch, &binding).map_err(
+                |error| match error {
+                    crate::state::StateError::QuotaExceeded => GatewayStoreError::CAPACITY,
+                    crate::state::StateError::InventoryRequired
+                    | crate::state::StateError::EffectConflict => {
+                        GatewayStoreError::RECONCILIATION_REQUIRED
+                    }
+                    _ => GatewayStoreError::STATE,
+                },
+            )?;
+        }
         Ok(())
     }
 
@@ -194,8 +219,7 @@ impl LocalGatewayStore {
                 .ok_or(GatewayStoreError::STATE);
         }
         self.check_source(state, binding, source, context)?;
-        self.check_capacity(context)?;
-        self.reserve_scratch(state, &resource, &layout)?;
+        self.reserve_scratch(state, &resource, &layout, false)?;
         let admission = state
             .admit_gateway_publication(binding, resource.receiver_epoch, resource.fence_generation)
             .map_err(|_| GatewayStoreError::STATE)?;
@@ -203,7 +227,7 @@ impl LocalGatewayStore {
             .list_gateway_executions(&binding.admission_id)
             .map_err(|_| GatewayStoreError::STATE)?
             .pop();
-        if let Some(previous) = previous {
+        if let Some(previous) = &previous {
             if previous.effect_state == "verified" {
                 return state
                     .get_publication(&binding.commit_key)
@@ -220,13 +244,39 @@ impl LocalGatewayStore {
             .guard
             .check()
             .map_err(|_| GatewayStoreError::RESOURCE)?;
-        let execution = state
-            .start_gateway_execution(
-                &binding.admission_id,
-                resource.receiver_epoch,
-                resource.fence_generation,
-            )
-            .map_err(|_| GatewayStoreError::STATE)?;
+        let ordinal = previous
+            .as_ref()
+            .map_or(1, |old| old.ordinal.saturating_add(1));
+        let growth =
+            self.get_growth_binding(&resource, "copy", &binding.admission_id, ordinal, context);
+        let execution = {
+            let capacity_guard =
+                crate::physical_registry::acquire_capacity_guard(state, context.guard)
+                    .map_err(|_| GatewayStoreError::BUSY)?;
+            let capacity = self
+                .endpoint
+                .capacity()
+                .map_err(|_| GatewayStoreError::CAPACITY)?;
+            capacity_guard
+                .check(state, context.guard)
+                .map_err(|_| GatewayStoreError::RECONCILIATION_REQUIRED)?;
+            state
+                .start_gateway_execution_with_growth(
+                    &binding.admission_id,
+                    resource.receiver_epoch,
+                    resource.fence_generation,
+                    &growth,
+                    capacity.capacity_bytes,
+                    capacity.available_bytes,
+                )
+                .map_err(|error| match error {
+                    crate::state::StateError::QuotaExceeded => GatewayStoreError::CAPACITY,
+                    crate::state::StateError::InventoryRequired => {
+                        GatewayStoreError::RECONCILIATION_REQUIRED
+                    }
+                    _ => GatewayStoreError::STATE,
+                })?
+        };
         drop(owner);
         self.run_publication(
             state,
@@ -316,7 +366,7 @@ impl LocalGatewayStore {
         }
         let (owner, _scratch) = self.open_bound_layout(&layout)?;
         acquire_file_lock(&owner)?;
-        self.reserve_scratch(state, &resource, &layout)?;
+        self.reserve_scratch(state, &resource, &layout, true)?;
         self.check_coordinator(&coordinator)?;
         execution = state
             .start_gateway_verification(
@@ -351,6 +401,14 @@ impl LocalGatewayStore {
         context: &GatewayExecutionContext<'_>,
         coordinator: &File,
     ) -> Result<Option<Value>, GatewayStoreError> {
+        let growth = self.get_growth_binding(
+            resource,
+            "copy",
+            &admission.binding.admission_id,
+            execution.ordinal,
+            context,
+        );
+        self.check_growth_hold(state, &growth)?;
         let outcome = (|| {
             let mut reservation = Some(
                 context
@@ -517,6 +575,25 @@ impl LocalGatewayStore {
             {
                 return Err(GatewayStoreError::OUTCOME_UNKNOWN);
             }
+            let latest = state
+                .list_gateway_executions(&admission.binding.admission_id)
+                .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?
+                .into_iter()
+                .find(|row| row.ordinal == execution.ordinal)
+                .ok_or(GatewayStoreError::OUTCOME_UNKNOWN)?;
+            for identity in [
+                latest.worker_identity.as_ref(),
+                latest.verification_worker_identity.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if !quiesce_recorded_worker(identity, context.guard)
+                    .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?
+                {
+                    return Err(GatewayStoreError::OUTCOME_UNKNOWN);
+                }
+            }
             if report.native_snapshot_id.is_none() {
                 if source.is_some()
                     || execution.native_result_id.is_some()
@@ -527,14 +604,21 @@ impl LocalGatewayStore {
                 {
                     return Err(GatewayStoreError::OUTCOME_UNKNOWN);
                 }
+                let capacity_guard =
+                    crate::physical_registry::acquire_capacity_guard(state, context.guard)
+                        .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
+                capacity_guard
+                    .check(state, context.guard)
+                    .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
                 state
-                    .transition_gateway_execution(
+                    .transition_gateway_execution_with_growth(
                         &admission.binding.admission_id,
                         execution.ordinal,
                         resource.receiver_epoch,
                         resource.fence_generation,
                         "proven_unpublished",
                         None,
+                        &growth,
                     )
                     .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
                 return Ok(None);
@@ -589,13 +673,20 @@ impl LocalGatewayStore {
                 "repository_id":report.repository_id,"native_result_id":native,"durability":"durable",
                 "verification":"data_verified","committed_at":chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs,true)
             }).as_object().ok_or(GatewayStoreError::OUTCOME_UNKNOWN)?.clone());
+            let capacity_guard =
+                crate::physical_registry::acquire_capacity_guard(state, context.guard)
+                    .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
+            capacity_guard
+                .check(state, context.guard)
+                .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)?;
             state
-                .record_gateway_receipt(
+                .record_gateway_receipt_with_growth(
                     &admission.binding.admission_id,
                     execution.ordinal,
                     resource.receiver_epoch,
                     resource.fence_generation,
                     &receipt,
+                    &growth,
                 )
                 .map(Some)
                 .map_err(|_| GatewayStoreError::OUTCOME_UNKNOWN)

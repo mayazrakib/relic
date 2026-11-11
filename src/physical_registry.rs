@@ -881,3 +881,62 @@ pub fn complete_inventory(
     }
     tx.commit().map_err(|_| PhysicalRegistryError::STATE)
 }
+
+// One node-wide pinned lock deliberately serializes all local volumes.
+pub struct CapacityGuard {
+    endpoint: LocalEndpoint,
+    coordinator: File,
+    coordinator_identity: String,
+    deadline: Instant,
+}
+
+impl CapacityGuard {
+    pub fn check(
+        &self,
+        state: &StateStore,
+        guard: &StageGuard,
+    ) -> Result<(), PhysicalRegistryError> {
+        check_guard(guard, self.deadline)?;
+        let (_, ready, saved) = read_meta(&state.connection)?;
+        if !ready || saved.as_deref() != Some(self.coordinator_identity.as_str()) {
+            return Err(PhysicalRegistryError::INVENTORY_REQUIRED);
+        }
+        let current_state = get_state_endpoint(state)?;
+        if current_state.identity() != self.endpoint.identity()
+            || get_identity_text(get_file_identity(&self.coordinator)?) != self.coordinator_identity
+        {
+            return Err(PhysicalRegistryError::DRIFT);
+        }
+        check_lock_slot(self.endpoint.directory(), &self.coordinator)?;
+        check_guard(guard, self.deadline)
+    }
+}
+
+pub fn acquire_capacity_guard(
+    state: &StateStore,
+    guard: &StageGuard,
+) -> Result<CapacityGuard, PhysicalRegistryError> {
+    let deadline = Instant::now()
+        .checked_add(Duration::from_secs(MAX_SECONDS))
+        .ok_or(PhysicalRegistryError::RESOURCE)?;
+    check_guard(guard, deadline)?;
+    let (_, ready, saved) = read_meta(&state.connection)?;
+    let saved = saved.ok_or(PhysicalRegistryError::INVENTORY_REQUIRED)?;
+    if !ready {
+        return Err(PhysicalRegistryError::INVENTORY_REQUIRED);
+    }
+    let endpoint = get_state_endpoint(state)?;
+    let coordinator = get_lock(&endpoint, Some(&saved))?;
+    if get_identity_text(get_file_identity(&coordinator)?) != saved {
+        return Err(PhysicalRegistryError::DRIFT);
+    }
+    check_registered_access(state, PhysicalRootKind::STATE, "node", &endpoint, guard)?;
+    let result = CapacityGuard {
+        endpoint,
+        coordinator,
+        coordinator_identity: saved,
+        deadline,
+    };
+    result.check(state, guard)?;
+    Ok(result)
+}
