@@ -1,3 +1,5 @@
+[![Implementation Branch CI](https://img.shields.io/github/actions/workflow/status/mayazrakib/relic/ci.yml?branch=implementation%2Frelic-full-system&label=implementation%20branch%20CI)](https://github.com/mayazrakib/relic/actions/workflows/ci.yml?query=branch%3Aimplementation%2Frelic-full-system)
+
 ## 1. Relic
 
 Relic is a Rust backup and recovery system under implementation. The [specification](SPEC.md) defines the target; [conformance](docs/conformance.md) records actual evidence and remaining gates. The full system is not ready for protecting production data.
