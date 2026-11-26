@@ -40,7 +40,7 @@ sha2 = "=0.11.1"
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "net", "io-util", "signal", "sync", "time"] }
 toml = "=0.9.8"
 uuid = { version = "=1.29.2", features = ["v7", "serde"] }
-zeroize = "=1.9.1"
+zeroize = "=1.9.2"
 
 [dev-dependencies]
 tempfile = "=3.27.0"
