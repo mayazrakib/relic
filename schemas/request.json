@@ -1,0 +1,2254 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:relic:schema:core-request:1",
+    "oneOf": [
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_status"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "validate_job"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job": {
+                            "$ref": "urn:relic:schema:job:1"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "job"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "create_job"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job": {
+                            "$ref": "urn:relic:schema:job:1"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "idempotency_key",
+                        "job"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "update_job"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        },
+                        "job": {
+                            "$ref": "urn:relic:schema:job:1"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "expected_revision",
+                        "job"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "run_job"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "idempotency_key",
+                        "job_id",
+                        "expected_revision"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_run"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "run_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "run_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_capabilities"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_health"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "doctor"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_settings"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_jobs"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_repositories"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_nodes"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_events"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_protection"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_job"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "job_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "set_job_enabled"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "job_id",
+                        "expected_revision",
+                        "enabled"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "delete_job"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "job_id",
+                        "expected_revision"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_runs"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "job_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "cancel_run"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "run_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "run_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "pause_run"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "run_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "run_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "resume_run"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "run_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "run_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "validate_destination"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "endpoint": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "endpoint"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_snapshots"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "repository_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "repository_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "verify_repository"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "repository_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "repository_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "plan_prune"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "repository_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "repository_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "execute_prune"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_digest": {
+                            "type": "string",
+                            "pattern": "^sha256:[0-9a-f]{64}$"
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "plan_id",
+                        "idempotency_key",
+                        "plan_digest",
+                        "expected_revision"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "approve_plan"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_digest": {
+                            "type": "string",
+                            "pattern": "^sha256:[0-9a-f]{64}$"
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "plan_id",
+                        "idempotency_key",
+                        "plan_digest",
+                        "expected_revision"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "plan_mirror"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "job_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "preview_restore"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "repository_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "snapshot_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "endpoint": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "selections": {
+                            "type": "array",
+                            "maxItems": 1024,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "encoding": {
+                                        "enum": [
+                                            "unix_bytes",
+                                            "windows_utf16le"
+                                        ]
+                                    },
+                                    "components": {
+                                        "type": "array",
+                                        "maxItems": 1024,
+                                        "items": {
+                                            "type": "string",
+                                            "pattern": "^[A-Za-z0-9_-]*$",
+                                            "maxLength": 131072
+                                        }
+                                    }
+                                },
+                                "required": [
+                                    "encoding",
+                                    "components"
+                                ],
+                                "additionalProperties": false
+                            }
+                        },
+                        "mappings": {
+                            "type": "array",
+                            "maxItems": 1024,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "source": {
+                                        "type": "object",
+                                        "properties": {
+                                            "encoding": {
+                                                "enum": [
+                                                    "unix_bytes",
+                                                    "windows_utf16le"
+                                                ]
+                                            },
+                                            "components": {
+                                                "type": "array",
+                                                "maxItems": 1024,
+                                                "items": {
+                                                    "type": "string",
+                                                    "pattern": "^[A-Za-z0-9_-]*$",
+                                                    "maxLength": 131072
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "encoding",
+                                            "components"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "destination": {
+                                        "type": "object",
+                                        "properties": {
+                                            "encoding": {
+                                                "enum": [
+                                                    "unix_bytes",
+                                                    "windows_utf16le"
+                                                ]
+                                            },
+                                            "components": {
+                                                "type": "array",
+                                                "maxItems": 1024,
+                                                "items": {
+                                                    "type": "string",
+                                                    "pattern": "^[A-Za-z0-9_-]*$",
+                                                    "maxLength": 131072
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "encoding",
+                                            "components"
+                                        ],
+                                        "additionalProperties": false
+                                    }
+                                },
+                                "required": [
+                                    "source",
+                                    "destination"
+                                ],
+                                "additionalProperties": false
+                            }
+                        },
+                        "overwrite": {
+                            "enum": [
+                                "forbid",
+                                "replace",
+                                "rename",
+                                "skip"
+                            ],
+                            "default": "forbid"
+                        },
+                        "required_metadata": {
+                            "type": "array",
+                            "maxItems": 13,
+                            "uniqueItems": true,
+                            "items": {
+                                "enum": [
+                                    "permissions",
+                                    "acls",
+                                    "owner",
+                                    "group",
+                                    "timestamps",
+                                    "xattrs",
+                                    "alternate_streams",
+                                    "sparse",
+                                    "hardlinks",
+                                    "symlinks",
+                                    "file_flags",
+                                    "resource_forks",
+                                    "special_files"
+                                ]
+                            }
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "repository_id",
+                        "snapshot_id",
+                        "endpoint",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "start_restore"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_digest": {
+                            "type": "string",
+                            "pattern": "^sha256:[0-9a-f]{64}$"
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "plan_id",
+                        "idempotency_key",
+                        "plan_digest",
+                        "expected_revision"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_restore"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "restore_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "restore_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "subscribe_events"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "mark_read"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "event_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "event_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "dismiss_notification"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "event_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "event_id",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "update_settings"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "settings": {
+                            "type": "object",
+                            "properties": {
+                                "theme": {
+                                    "enum": [
+                                        "system",
+                                        "light",
+                                        "dark"
+                                    ]
+                                },
+                                "os_notifications": {
+                                    "type": "boolean"
+                                }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                        },
+                        "expected_revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "settings",
+                        "expected_revision"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_plan"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "plan_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "list_plan_entries"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "plan_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000,
+                            "default": 100
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "plan_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "get_operation"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "operation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "operation_id"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "method": {
+                    "const": "export_recovery_bundle"
+                },
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "correlation_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "output_endpoint": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "idempotency_key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        "repository_ids": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 128,
+                            "uniqueItems": true,
+                            "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                            }
+                        },
+                        "job_ids": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 128,
+                            "uniqueItems": true,
+                            "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                            }
+                        },
+                        "include_secrets": {
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "encryption_secret_ref": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        }
+                    },
+                    "required": [
+                        "correlation_id",
+                        "output_endpoint",
+                        "idempotency_key"
+                    ],
+                    "additionalProperties": false,
+                    "anyOf": [
+                        {
+                            "required": [
+                                "repository_ids"
+                            ]
+                        },
+                        {
+                            "required": [
+                                "job_ids"
+                            ]
+                        }
+                    ],
+                    "allOf": [
+                        {
+                            "if": {
+                                "properties": {
+                                    "include_secrets": {
+                                        "const": true
+                                    }
+                                },
+                                "required": [
+                                    "include_secrets"
+                                ]
+                            },
+                            "then": {
+                                "required": [
+                                    "encryption_secret_ref"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "method",
+                "params"
+            ],
+            "additionalProperties": false
+        }
+    ]
+}

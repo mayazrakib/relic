@@ -1,0 +1,613 @@
+{
+    "schema_version": 1,
+    "recorded_at": "2026-11-10T22:10:56.149289+00:00",
+    "scope": "Bounded physical root registry, source-independent admitted-scope recovery, and private file-only worker SQLite grants",
+    "sources": [
+        {
+            "path": ".cargo/config.toml",
+            "sha256": "8b6bb16262ab5ed26a7dfc9ec8077f46cf4f3aa87a662a823449bbbcadb7d8b5"
+        },
+        {
+            "path": ".github/workflows/ci.yml",
+            "sha256": "467bb954775baa11b58b00669c5cd13621aaf5f6a064ab5b3ddbfaa4ec5850ff"
+        },
+        {
+            "path": ".tool-versions",
+            "sha256": "115c61338be28f7a7ef85289a9e934bdcf2dd692a99c9968362da39189d734e3"
+        },
+        {
+            "path": "AGENTS.md",
+            "sha256": "15c6898a41de7e62d4a1167ab104e3e16d32e0634ee6fd1a39373cebfd3d834c"
+        },
+        {
+            "path": "Cargo.lock",
+            "sha256": "143939a12b8eb611e4949b45a4fe20e0e895dbc995b1027e44f91bd060a06cc7"
+        },
+        {
+            "path": "Cargo.toml",
+            "sha256": "090911f0fb1ec65fa305d595fdc8367f0c1d10faeb20d6201105537f1a425ef9"
+        },
+        {
+            "path": "LICENSE",
+            "sha256": "42fa9de5da4893c96d89d6a2e21e7d95cc34fe42c7903689b9d3c1bffb9c57e7"
+        },
+        {
+            "path": "SPEC.md",
+            "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
+        },
+        {
+            "path": "Taskfile.yml",
+            "sha256": "8c542e02fb8d6b98ccb4926bae181ed8b2d872419f8eb23e31eee09df466d55d"
+        },
+        {
+            "path": "database/migrations/00001_initialize.sql",
+            "sha256": "c1627cf07a36f2019e5c31ea925b262b58f7ed608974668454c6b4f8a71491e7"
+        },
+        {
+            "path": "database/migrations/00002_capture.sql",
+            "sha256": "42bcf4037b4590cc3e1ecbd0c29f75e560d02e701d4dc371728b1d070a475002"
+        },
+        {
+            "path": "database/migrations/00003_manifest_artifacts.sql",
+            "sha256": "fc039071fd93bfa3613043db767d496c6747a1b4d4f539cd7f6e2a5d0c6d0350"
+        },
+        {
+            "path": "database/migrations/00004_payload_artifacts.sql",
+            "sha256": "f3622e7c2a11863d42766ddd075fa275f76824a503f054ed7ebc0c319249c9fe"
+        },
+        {
+            "path": "database/migrations/00005_restore_intents.sql",
+            "sha256": "c3930a9b1cbea26dba9520ec3468f30bb4096bf0d5f43642a2ef93dbe2e97a42"
+        },
+        {
+            "path": "database/migrations/00006_archive_stages.sql",
+            "sha256": "ac9baaee7788e2dfadd24c44defcc40bbc3b7ffbfc1bc121a023d19a788c1b91"
+        },
+        {
+            "path": "database/migrations/00007_native_runs.sql",
+            "sha256": "82cfa788bffeee92747182721efa7ee19072cb3c7467548c84a68fd0a0d4d2eb"
+        },
+        {
+            "path": "database/migrations/00008_staging_quota.sql",
+            "sha256": "4b37f2e897a71d0680daecec76fafdb6a88618ca764a3d5cbe64007a2dd9d545"
+        },
+        {
+            "path": "database/migrations/00009_gateway.sql",
+            "sha256": "34ac4545335bd3d9f5c1174fd0e3790030b7a20c6d2ded7da854bc4b2580ddcb"
+        },
+        {
+            "path": "database/migrations/00010_gateway_layout.sql",
+            "sha256": "78141bd366a9195cc785a5a6c5d14d3b28b21d94b4a35b4b94f5d1533b19eb63"
+        },
+        {
+            "path": "database/migrations/00011_gateway_budgets.sql",
+            "sha256": "68a13c89e3071ec904521ada72ba63e875b46bc0e3853c402d59b3246fec59c3"
+        },
+        {
+            "path": "database/migrations/00012_native_worker_scopes.sql",
+            "sha256": "9c67cd863b164af1967b67ccead62602da9d9959c856fc2917f95377ad000d75"
+        },
+        {
+            "path": "database/migrations/00013_physical_roots.sql",
+            "sha256": "c46cb728b0a456b0c668f03d5ab46f5c6d7ced9ebcb690e318369990c8a7efd3"
+        },
+        {
+            "path": "fixtures/contracts/checkpoint.json",
+            "sha256": "bee0e2634a9192ab764a1b75f8b0c00556ae915ea0493367077210045e95009c"
+        },
+        {
+            "path": "fixtures/contracts/manifest_entry.json",
+            "sha256": "0cabeeff2d1bf44e935a551d854340b959b0405c15ee28c16d29b901dee6f8ef"
+        },
+        {
+            "path": "fixtures/contracts/manifest_header.json",
+            "sha256": "09abbb62f2a9065f56900493768c3c7a8aacdcd68d0102a7a09ac6d32196f40c"
+        },
+        {
+            "path": "fixtures/contracts/occurrence.json",
+            "sha256": "d94a478d6f86968abdd4c70ed0072d92d91955e19d421eb07916f7adbda955dc"
+        },
+        {
+            "path": "fixtures/contracts/plan_entry.json",
+            "sha256": "9bb3c698255a799ad513dfe069d9443f0636615e7d2651fe5f786bdadd50da2e"
+        },
+        {
+            "path": "fixtures/contracts/plan_header.json",
+            "sha256": "f36898de9042c02e12266101340383dc5797df65519248ef9e9b1513dcad5683"
+        },
+        {
+            "path": "fixtures/contracts/policy.json",
+            "sha256": "4c3d02bd17c96d3dd63ef3216a5badeb637097fe3fe3e650faef23a9d17216ee"
+        },
+        {
+            "path": "fixtures/contracts/publication.json",
+            "sha256": "35df93e04db6cd34cb8a692755622e9775c3b39e0ab2be93ae3c227ace571f50"
+        },
+        {
+            "path": "fixtures/contracts/receipt.json",
+            "sha256": "0bc762646dfd811983c52a498c2c1399c492b2bd9f12ec927aa38bcbf6b79ea4"
+        },
+        {
+            "path": "schemas/job.json",
+            "sha256": "e28f5f3cbba004f5010d6c50d2b20282ddac9098b0bf0374e53699d5fc0fec6a"
+        },
+        {
+            "path": "schemas/records.json",
+            "sha256": "bbde6c64a1bbccf6bab790da3ebd9d0b504cc5aa7af8b8fe551354f6eb9b88c7"
+        },
+        {
+            "path": "schemas/request.json",
+            "sha256": "fa0bbaf92d738cd5dad79672cbc606fd4a5d5b59c217c00d3d3b9a049c7221b4"
+        },
+        {
+            "path": "schemas/response.json",
+            "sha256": "5896e8950996e5885fbb73a7e07bf147d424a6ca5bf5d76311800f356c7c4f56"
+        },
+        {
+            "path": "src/archive.rs",
+            "sha256": "f27fcd96b26f116f09587d9fbe874c00d708189d6ba68d23021718d2d1094a40"
+        },
+        {
+            "path": "src/archive_backend.rs",
+            "sha256": "457bcb62355095096fbd6aab92d6a8684a139cce4f5b09e7268bd908d2919a9c"
+        },
+        {
+            "path": "src/archive_disk.rs",
+            "sha256": "b1e8f5cae39cf92d494ae34df686f11e477a569f925ad2aae218f57486e35a06"
+        },
+        {
+            "path": "src/archive_manifest.rs",
+            "sha256": "dd4bf4a656b8ef4fa46f713bcd6bd9c19b4e8cdf03be422eea1fb1c0304dd275"
+        },
+        {
+            "path": "src/archive_snapshot.rs",
+            "sha256": "cc0239f23c8a71ce2efe13c1798b1428a19cc1c8a73559d14b02305c96e4821e"
+        },
+        {
+            "path": "src/archive_source.rs",
+            "sha256": "2d40a2db145a1ad604532a8c18e19e80acb3708e10a40c86b8be111da793b02f"
+        },
+        {
+            "path": "src/archive_worker.rs",
+            "sha256": "0dadea2e7f522f3175bb64f540013e4c1463760101d784ae1df3024911bf58d7"
+        },
+        {
+            "path": "src/artifact_store.rs",
+            "sha256": "307c7bea0a94c9d02d796ea8a79aba114eb8e3ce7563a7669e8733099e7e6f16"
+        },
+        {
+            "path": "src/bin/relic-gateway-worker.rs",
+            "sha256": "5e6d249a4bbdf8f5e7ae32882b2c880f995a33aec1ddb4bc4434eafb50adf22b"
+        },
+        {
+            "path": "src/bin/relic-worker.rs",
+            "sha256": "fabc78a4a8f37a47354c7fba974d9cf5a6fced6b7914a8f47526c1612bb30bf3"
+        },
+        {
+            "path": "src/bin/relicd.rs",
+            "sha256": "4081cb9afc1ad3884b5f7826c454b0d9e2d47c51917d5185a9568eec62d5e12f"
+        },
+        {
+            "path": "src/config.rs",
+            "sha256": "6b365605caf2befcb841c513c234147d267b74c539eb765587eb8eb28c77f103"
+        },
+        {
+            "path": "src/contracts.rs",
+            "sha256": "baf39a6bd9d27a9c5fc0fc77ce46eeecf880ed877339df330abee130af27b004"
+        },
+        {
+            "path": "src/domain.rs",
+            "sha256": "a9988ac232cada5dee1ce16f71c3d24d6e8c2519b2a67a8c2ee274ae20d7322a"
+        },
+        {
+            "path": "src/embedded_archive.rs",
+            "sha256": "43d1bdc7140691ef37faf80cf45e9776383dafae47ae808fd3dfd3ba197f0c9c"
+        },
+        {
+            "path": "src/encrypted_manifest_sort.rs",
+            "sha256": "ebc86e65bc48be0f415ffd00256558b65638ef728f3fe32b859d0fe288e5d185"
+        },
+        {
+            "path": "src/encrypted_manifest_sort/unix.rs",
+            "sha256": "f7fff1a0ab4942baa460f8c62c828fd1dbec7cc70df6a7fdc45f9b5375e9c8e0"
+        },
+        {
+            "path": "src/encrypted_spool.rs",
+            "sha256": "d124c5a67b8755a6b033f888638af0e9eddb17ebda47f9fb99ba390ce093701a"
+        },
+        {
+            "path": "src/gateway_layout.rs",
+            "sha256": "47c68b300d51662553b55347a97b355d723e987c38ed2163528bc456c4ea7a29"
+        },
+        {
+            "path": "src/gateway_publication.rs",
+            "sha256": "b6cea7f8c36fc693f43eb10e700d41a8791c9ee0e81f997f1000187f4b8ec552"
+        },
+        {
+            "path": "src/gateway_state.rs",
+            "sha256": "3c77e64d4616b07e30f0234a25dce7def5a5af30f86d57f61bcf11588e7377fb"
+        },
+        {
+            "path": "src/gateway_store.rs",
+            "sha256": "cb64fc4bb0f40cdf19dab1303f04e558debc4f08dfd09f254d2366f5331d4a88"
+        },
+        {
+            "path": "src/gateway_worker.rs",
+            "sha256": "7ab53ee4d0c8c5a8f587153c6d006e1c7b81cd38031856f53746ef4f1a998924"
+        },
+        {
+            "path": "src/identity.rs",
+            "sha256": "49428b28785e5c0163cda9020f26b7c42c5efb382d4244e98b4f744634b4f496"
+        },
+        {
+            "path": "src/lib.rs",
+            "sha256": "587d2f6f0f03bbc0aebaff988351e6900c8906fa7de855db315a29a6dbe3a071"
+        },
+        {
+            "path": "src/local_endpoint.rs",
+            "sha256": "b83d5ed32abd9c6e92f5e51182fb0788156f8271a71a6c321e3c805b72fcf84d"
+        },
+        {
+            "path": "src/main.rs",
+            "sha256": "03cbf2f1c7593b3c716a751eccc5920c8a2a6c1204144c8bf05218470446fe6d"
+        },
+        {
+            "path": "src/manifest.rs",
+            "sha256": "2fe1d131d1c8bbcc271cce728b43c857b3e99d6db15b2a28574e097c65747f0d"
+        },
+        {
+            "path": "src/manifest_artifact.rs",
+            "sha256": "38784e55fda661634b45e7440d6b0605d9df163e518802f57af280282d399cd0"
+        },
+        {
+            "path": "src/manifest_spool.rs",
+            "sha256": "77cbab56f7eecc85b4d34cb1f9b7a95b93c375bf6155ad46c5b2540d509630fd"
+        },
+        {
+            "path": "src/native_run_store.rs",
+            "sha256": "43b3e83f971477a9020df39132a7a5878035e1a44d5d17a630a017ca6428278f"
+        },
+        {
+            "path": "src/payload_capture.rs",
+            "sha256": "055abd3c479996acd9aa8f8352c5e07f8d6cd37ed8bcf0405f48028c1922a62e"
+        },
+        {
+            "path": "src/physical_registry.rs",
+            "sha256": "b2875f624975dbbf7d3a353399c561f6889379c866f50b95eb4e1dca370b49b7"
+        },
+        {
+            "path": "src/planner.rs",
+            "sha256": "e8aa8436c02a5606081cde78eddc16d191c3695e09832051f011b4906e43a02e"
+        },
+        {
+            "path": "src/resources.rs",
+            "sha256": "1de71a5bf97b95b582f2018cf35fe5dca41ed19206f62d0cba05eab28e4a2a8a"
+        },
+        {
+            "path": "src/restore.rs",
+            "sha256": "d29f0b884a6cdb20545a6cf21c408afbb3b47a33e43aa5bcde740f31737c88a9"
+        },
+        {
+            "path": "src/restore_store.rs",
+            "sha256": "d2e2e71fa52a782ec2d1bfe9418c37dfca0d631817520f6b0961f87415c06d6a"
+        },
+        {
+            "path": "src/scheduler.rs",
+            "sha256": "7d74dce3a0d135cd180272ff23c8756ef92b9d2dfc8008cebdc7eb2212e998bb"
+        },
+        {
+            "path": "src/service.rs",
+            "sha256": "e1ae7a14853e13810ed6c35dfed5d2aec757dd18c8561988c799cca3cc517dbd"
+        },
+        {
+            "path": "src/source_scan.rs",
+            "sha256": "c452c5dcda9581d6f20325826470447f2c5ee332d3ec2ecd11e0e47b7ba3e234"
+        },
+        {
+            "path": "src/staging_quota.rs",
+            "sha256": "37d9eb803592ee435e760d095d0be4e6061ca55473d684b0be803679d5b325a6"
+        },
+        {
+            "path": "src/state.rs",
+            "sha256": "d87ff4fd91cee20b5800e5dbf177fcd314ce9fd679fd5f9a7ba8c5f09793494a"
+        },
+        {
+            "path": "src/worker_identity.rs",
+            "sha256": "cf99fc9d371bdef531891e78d47c3debae7fea87f8e5bf9f7fb9af3bc52e4894"
+        },
+        {
+            "path": "src/worker_runtime.rs",
+            "sha256": "ae068c023b734696f51517a9d7507b497b5640fe979ef0b76f615e543e08efe6"
+        },
+        {
+            "path": "src/worker_sandbox.rs",
+            "sha256": "04f8d40324d2a57ff654894ee26fe3bfcfc22169e9990e34ed6dd0fb4546ff86"
+        },
+        {
+            "path": "src/worker_state.rs",
+            "sha256": "c61aafb9beaaa8de3003a644f3cee9caacbc80d5636a18bf6565216aeadbd953"
+        },
+        {
+            "path": "tests/archive.rs",
+            "sha256": "8b126dc94f7acfbd8eede755a6271376303f5e42dbc2dc1b018d01d89058eeb4"
+        },
+        {
+            "path": "tests/archive_backend.rs",
+            "sha256": "dd64463a6497531ebe766c376011cb2259ab8f75d059650909c11b572e11c01e"
+        },
+        {
+            "path": "tests/archive_disk.rs",
+            "sha256": "68f45b97283c1d0f984b45741b07d3c958cc76c4458e9ea78b4419798aba362c"
+        },
+        {
+            "path": "tests/archive_manifest.rs",
+            "sha256": "ef04361b25fe50d6bcb83126a68ef0a960223737c6aa3a4b25214f594c4c27fc"
+        },
+        {
+            "path": "tests/archive_source.rs",
+            "sha256": "cb88c6b5467e780054e8a0c9bdbb1068ef85c306d181adde06664391ee51423a"
+        },
+        {
+            "path": "tests/archive_stage_state.rs",
+            "sha256": "2b44fac03f4cf777507fb95cfb4498f83969808bc9b7152a6a3dd509efef9114"
+        },
+        {
+            "path": "tests/archive_worker_protocol.rs",
+            "sha256": "fb8fc50c8205c4fee563fa0f1e1e87e145d760d56411810bd32c67bec779986d"
+        },
+        {
+            "path": "tests/artifact_state.rs",
+            "sha256": "1d8d962606b71d32715a3f9b3bc2b0a2a8a4421d1bdacf45ad0d7f8593737230"
+        },
+        {
+            "path": "tests/artifact_store.rs",
+            "sha256": "0038d2212794b61032a568e2b47c33e2b557eea09f7db01daec1584fe04b9fc0"
+        },
+        {
+            "path": "tests/capture_integration.rs",
+            "sha256": "93a316c6d66518ace23739c4205e0139b6b3f240fa468a9f7bb9cb4f5cdaee82"
+        },
+        {
+            "path": "tests/capture_pipeline.rs",
+            "sha256": "0a64b9bb15452f9837bb32258d344621fcee275ce4ceb9530b2a0008cc0cec38"
+        },
+        {
+            "path": "tests/capture_state.rs",
+            "sha256": "d526b195bb8d53f5d9e45e447b7aba0d881a12aad64b07b2e12039416e73d41a"
+        },
+        {
+            "path": "tests/cli.rs",
+            "sha256": "83d42be898d660f35d3343c23ac84ef036734d28051b4db28b383b33e5294937"
+        },
+        {
+            "path": "tests/config.rs",
+            "sha256": "ece024cff94c46e6906b36939855414b7a5dfb2fbc9d205a3fd1d52a93e4eb08"
+        },
+        {
+            "path": "tests/contracts.rs",
+            "sha256": "5ee8b3153575f19db109bb5d9c8fefbde51da65c50cc144d90e542736f5b3c33"
+        },
+        {
+            "path": "tests/domain.rs",
+            "sha256": "5bdbd21bdd45b6260480ed08c64ff673d6b0bae555987fe171f8da0f92ab1212"
+        },
+        {
+            "path": "tests/embedded_archive.rs",
+            "sha256": "c02df3fc75c25f4e1c31d674afe6f5f50a68122a227e135aacc88295193827b4"
+        },
+        {
+            "path": "tests/encrypted_manifest_sort.rs",
+            "sha256": "a8ac5883ec4f74649e634df0b0e0d21d2bc6d03fba3ce59626b0089950ed09fa"
+        },
+        {
+            "path": "tests/encrypted_spool.rs",
+            "sha256": "f6390a309413255b89595d55886f6dfcaf5d90743df5bd4cf4aa0b6ab028d9f3"
+        },
+        {
+            "path": "tests/endpoint_identifiers.rs",
+            "sha256": "d924c628de25f92312741297895fa96e0810b73ebfa0c32fe21befb00798e77b"
+        },
+        {
+            "path": "tests/gateway_layout.rs",
+            "sha256": "eb4ccace9227ae0b0f3e0775a8235bf279039e34a31d20cfd5bacd8889d12074"
+        },
+        {
+            "path": "tests/gateway_publication_state.rs",
+            "sha256": "ced9ba2b1b5d6652037b18a4e46be7d5cf0e7899c5de43fe137dad95a7c1cd8c"
+        },
+        {
+            "path": "tests/gateway_state.rs",
+            "sha256": "02b4b08339165114fbee4970d0e26a9c5e226239a6dbffee4aa79ac4588da67e"
+        },
+        {
+            "path": "tests/gateway_store.rs",
+            "sha256": "1ae775eb59a733e0c8b35fcfe3f2c05b170b41593435c954aacc0720471be9d3"
+        },
+        {
+            "path": "tests/gateway_worker_protocol.rs",
+            "sha256": "6e43547244c9e864da16cde1a380d26d2708b2c092c7577307d9a867541399b0"
+        },
+        {
+            "path": "tests/identity.rs",
+            "sha256": "251fb52035477200d146bd1c025c7ae4eaa7f6271611951db6eaefb166f15b1e"
+        },
+        {
+            "path": "tests/local_endpoint.rs",
+            "sha256": "9c7b2e67f988d1b65eb106c52eafd67f26fed8e227dcd682d2a9130e1680315b"
+        },
+        {
+            "path": "tests/manifest.rs",
+            "sha256": "3fb0b1a2e975b20dd8682b838bc77f4bf66e9d9cd09eb18fd7b78721c5f951f4"
+        },
+        {
+            "path": "tests/manifest_artifact.rs",
+            "sha256": "bb9b6f17990492b5f8489f0f8879f4e11b46e82d49cf458c55a8e0016a3c5b66"
+        },
+        {
+            "path": "tests/manifest_spool.rs",
+            "sha256": "8c4ec7347ba43dc9bc4a71f5e167734e5ee05caab55e25b60d8970d92f8eff0c"
+        },
+        {
+            "path": "tests/native_run_state.rs",
+            "sha256": "7365a4108ffa747970970d205d4bf39416ee047bc77ccbb1fe1c5a9d824fbde1"
+        },
+        {
+            "path": "tests/native_run_store.rs",
+            "sha256": "4408a46dfbd10069ed78af8e692916f4292587a4556b7819289851237b26dafd"
+        },
+        {
+            "path": "tests/payload_capture.rs",
+            "sha256": "3e09d54162313e5e84baaf76bfd5250e7a5aa0bcb58f24d72f37eadbc29ec1d5"
+        },
+        {
+            "path": "tests/payload_state.rs",
+            "sha256": "fc7925249f66c023e2da6f09dd6a1fe2569cb84fc4a4ac43842d963c6ffa66d3"
+        },
+        {
+            "path": "tests/payload_store.rs",
+            "sha256": "47130cdd9ad451e38d0ef7ec48410686d7fb9c48feca8b8257d2012d0a03bf7d"
+        },
+        {
+            "path": "tests/physical_registry.rs",
+            "sha256": "99be2c0e34ea46e27eb886d80126b90f16b3cb9cc691d22e0d00a6a030a48070"
+        },
+        {
+            "path": "tests/planner.rs",
+            "sha256": "278506227b69a13ba48334a658bc13689900f5bdc82dcfc24e90846290442f8f"
+        },
+        {
+            "path": "tests/resources.rs",
+            "sha256": "3c1d2678bdadb99d9856592a11d5c74511fab83d30d4528331aee6fd412e242f"
+        },
+        {
+            "path": "tests/restore.rs",
+            "sha256": "f57452f4d11a82021ee3ecd0ebc4e0822da9c27c1bb4253b655b38c301c470bf"
+        },
+        {
+            "path": "tests/restore_state.rs",
+            "sha256": "142e68ea4d3d01cefe130b04582df53576dd2d8a70d172da5a1704f228b4e128"
+        },
+        {
+            "path": "tests/restore_store.rs",
+            "sha256": "af2f3e3276a102dfc14d9c3f623c33b8919876ef810b5de08abf0a134a77c7cc"
+        },
+        {
+            "path": "tests/scheduler.rs",
+            "sha256": "7a9111808644f8d43182030918e5cfae59dce06e2b86108eb889123a2aa699ac"
+        },
+        {
+            "path": "tests/service.rs",
+            "sha256": "616582e3197560bbcefbc641853b182121c6b41c4704674c8619f5fd31873818"
+        },
+        {
+            "path": "tests/source_scan.rs",
+            "sha256": "789d7fb762729e8aa293b9fdcef79a826912741c477916ab8b53ee0a612797b8"
+        },
+        {
+            "path": "tests/staging_quota_state.rs",
+            "sha256": "e669975792fba106eb282e96fc200c1fc569fa0375d3a87c3cda7d42f52a1c51"
+        },
+        {
+            "path": "tests/staging_quota_storage.rs",
+            "sha256": "2b23dbb497715f842e310009a89ce3eb1bc4a3cb41b0949202272ab2471fecc9"
+        },
+        {
+            "path": "tests/state.rs",
+            "sha256": "4c08077775f925821b585438ce18f823a545fbbc2517c5de35ca800d34a38564"
+        },
+        {
+            "path": "tests/state_readonly.rs",
+            "sha256": "9705e48c0d7ad772b981fd0e5980966b1dbeb1da680cdb95774901fc3ef12ca7"
+        },
+        {
+            "path": "tests/worker_identity.rs",
+            "sha256": "a2a9baf3e1ea7097533ad1103f20d54f4754ca329bc4f5a40dcceef09f411adf"
+        },
+        {
+            "path": "tests/worker_runtime.rs",
+            "sha256": "11b071cc793c76f413142586976f458bfb381ff88c3ce1d13f250c19c4e8fe21"
+        },
+        {
+            "path": "tests/worker_state.rs",
+            "sha256": "92f88817697b5b4921340ef660cd1a6b60ad77939e5472a55489d051d40c72b2"
+        },
+        {
+            "path": "tools/check.py",
+            "sha256": "5edc92d8e3b6c9da1ce7a0526cdc712c47a30ab7290fb9fb206db36855f70de8"
+        }
+    ],
+    "source_fingerprint": "cf1670f1de8200257417c25458e129a43264b1ad7f847fddb40dbc38048a4953",
+    "fingerprint_method": "SHA-256 of UTF-8 canonical Python JSON sources list using sorted keys and compact separators",
+    "envelope": {
+        "memory_max_bytes": 1073741824,
+        "memory_high_bytes": 805306368,
+        "swap_max_bytes": 0,
+        "compiler_jobs": 1,
+        "test_threads": 1,
+        "max_agent_workers": 1,
+        "tasks_max": 128,
+        "cpu_quota_percent": 200,
+        "unit_deadline_seconds": 900
+    },
+    "checks": [
+        {
+            "command": "python3 tools/check.py test --locked --all-targets --features embedded-archive -- --include-ignored",
+            "result": "passed",
+            "log": "build/validation/physical-registry-full-tests-final.log",
+            "log_sha256": "baf345b17b3a93012c60b69a6502f8ad4ca39af87a1c9502aa1652b42e8cdf15",
+            "reported_memory_peak": "215.6M (swap: 0B)",
+            "swap_used_bytes": 0,
+            "tests_passed": 259,
+            "tests_failed": 0,
+            "tests_ignored": 0,
+            "external_tools": [
+                "restic 0.19.1",
+                "rustic 0.11.4"
+            ]
+        },
+        {
+            "command": "python3 tools/check.py clippy --locked --all-targets --features embedded-archive -- -D warnings",
+            "result": "passed",
+            "log": "build/validation/physical-registry-clippy-complete.log",
+            "log_sha256": "a2c6f2cf86a298f1a223cee7380f268f8b79c4ac4ce0043356b39d55f413ecff",
+            "reported_memory_peak": "101M (swap: 0B)",
+            "swap_used_bytes": 0
+        },
+        {
+            "command": "python3 tools/check.py check --locked --all-targets --no-default-features",
+            "result": "passed",
+            "log": "build/validation/physical-registry-default-complete.log",
+            "log_sha256": "eeb57c57b1f834732b1465757235b3023c10e80bd72b6243147e33c6bccc2432",
+            "reported_memory_peak": "73.7M (swap: 0B)",
+            "swap_used_bytes": 0
+        }
+    ],
+    "last_fully_passing_native_checkpoint": {
+        "commit": "73454941316d06010886c55a436fd3622c377156",
+        "run_id": 42895779834,
+        "url": "https://github.com/mayazrakib/relic/actions/runs/42895779834",
+        "results": {
+            "linux-x86_64": "success",
+            "windows-x86_64": "success",
+            "macos-arm64": "success"
+        }
+    },
+    "verified": [
+        "Schema13 bounds physical registry admission to eight claims, eight-row pages, 4096 roots and 256KiB observations with cooperative five-second deadline; pinned private coordinator plus short generation-qualified write transaction",
+        "Device/inode/ancestor and translated mount-origin observations use kernel descriptor spelling and thread-self proc paths; legacy owned records close inventory gate until coverage is seeded and checked",
+        "Fresh staging, gateway, executable and restore controllers register before effects; overlapping managed roots and nested gateways reject before journal resource or owner/config creation; read-only sharing and exact staging sharing remain supported",
+        "Workers validate only their already-admitted exact scopes or proven staging descendants without opening unrelated roots; registry owner mismatch, replacement, stale boot/namespace and unknown inventory reject",
+        "Private native and final gateway verification validate existing own scopes without requiring removed source roots; fresh work retains full registry reobservation",
+        "Readonly workers receive only private SQLite database and existing WAL/SHM files, not recursive state-directory access; actual Landlock fixture reads DB while unrelated state token is inaccessible; identity-only directory descriptor is O_PATH",
+        "All259 local tests pass, including independent native/restic restoration, strict negative census, source-free recovery, owner-holding orphan exclusion, concurrent nested writer exclusion, and closed legacy inventory",
+        "Full feature Clippy, no-default-features check, rustfmt check and git diff whitespace check pass; all heavy checks enforce aggregate1GiB/high768MiB/swap0/compiler1/test1/worker1"
+    ],
+    "limitations": [
+        "Exclusive one canonical node database and protected root ancestors with external writer/namespace mutation exclusion; no other-host fencing or remote request drain",
+        "Original source-view producer lifecycle, complete physical object census, root retirement, safe cleanup/credits and boot/mount-namespace rebasing remain incomplete; changed evidence fails closed",
+        "Per-operation metadata snapshots remain future isolation work; workers currently read node database metadata, and parent must exclude path replacement during file capability setup",
+        "Destination growth and shared staging capacity-domain accounting are not implemented; Btrfs subvolume device/statfs identities do not identify a common free-space pool, and generic backing thin-pool independence is unqualified",
+        "Real mounted bind/casefold/Btrfs pool/project-quota qualification and power-loss tests are distinct from bounded parsed-observation and process-fault fixtures",
+        "Stable archive chunking, complete names/metadata and larger-index qualification, Windows/macOS worker containment, S3, maintenance/replication, copy/mirror/sync, snapshots, cluster/UI, databases/imaging, security/performance soaks and installers remain required; all enabled archive jobs and full system acceptance stay gated"
+    ]
+}

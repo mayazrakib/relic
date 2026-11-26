@@ -1,0 +1,527 @@
+{
+    "schema_version": 1,
+    "recorded_at": "2026-11-10T17:37:17.032085+00:00",
+    "scope": "Private Linux native-run ownership, finite creation and verification, contained durable sync, backend write quota, and retained uncertain-worker locks/resources",
+    "sources": [
+        {
+            "path": ".cargo/config.toml",
+            "sha256": "8b6bb16262ab5ed26a7dfc9ec8077f46cf4f3aa87a662a823449bbbcadb7d8b5"
+        },
+        {
+            "path": ".github/workflows/ci.yml",
+            "sha256": "467bb954775baa11b58b00669c5cd13621aaf5f6a064ab5b3ddbfaa4ec5850ff"
+        },
+        {
+            "path": ".tool-versions",
+            "sha256": "115c61338be28f7a7ef85289a9e934bdcf2dd692a99c9968362da39189d734e3"
+        },
+        {
+            "path": "AGENTS.md",
+            "sha256": "15c6898a41de7e62d4a1167ab104e3e16d32e0634ee6fd1a39373cebfd3d834c"
+        },
+        {
+            "path": "Cargo.lock",
+            "sha256": "143939a12b8eb611e4949b45a4fe20e0e895dbc995b1027e44f91bd060a06cc7"
+        },
+        {
+            "path": "Cargo.toml",
+            "sha256": "090911f0fb1ec65fa305d595fdc8367f0c1d10faeb20d6201105537f1a425ef9"
+        },
+        {
+            "path": "LICENSE",
+            "sha256": "42fa9de5da4893c96d89d6a2e21e7d95cc34fe42c7903689b9d3c1bffb9c57e7"
+        },
+        {
+            "path": "SPEC.md",
+            "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
+        },
+        {
+            "path": "Taskfile.yml",
+            "sha256": "8c542e02fb8d6b98ccb4926bae181ed8b2d872419f8eb23e31eee09df466d55d"
+        },
+        {
+            "path": "database/migrations/00001_initialize.sql",
+            "sha256": "c1627cf07a36f2019e5c31ea925b262b58f7ed608974668454c6b4f8a71491e7"
+        },
+        {
+            "path": "database/migrations/00002_capture.sql",
+            "sha256": "42bcf4037b4590cc3e1ecbd0c29f75e560d02e701d4dc371728b1d070a475002"
+        },
+        {
+            "path": "database/migrations/00003_manifest_artifacts.sql",
+            "sha256": "fc039071fd93bfa3613043db767d496c6747a1b4d4f539cd7f6e2a5d0c6d0350"
+        },
+        {
+            "path": "database/migrations/00004_payload_artifacts.sql",
+            "sha256": "f3622e7c2a11863d42766ddd075fa275f76824a503f054ed7ebc0c319249c9fe"
+        },
+        {
+            "path": "database/migrations/00005_restore_intents.sql",
+            "sha256": "c3930a9b1cbea26dba9520ec3468f30bb4096bf0d5f43642a2ef93dbe2e97a42"
+        },
+        {
+            "path": "database/migrations/00006_archive_stages.sql",
+            "sha256": "ac9baaee7788e2dfadd24c44defcc40bbc3b7ffbfc1bc121a023d19a788c1b91"
+        },
+        {
+            "path": "database/migrations/00007_native_runs.sql",
+            "sha256": "82cfa788bffeee92747182721efa7ee19072cb3c7467548c84a68fd0a0d4d2eb"
+        },
+        {
+            "path": "fixtures/contracts/checkpoint.json",
+            "sha256": "bee0e2634a9192ab764a1b75f8b0c00556ae915ea0493367077210045e95009c"
+        },
+        {
+            "path": "fixtures/contracts/manifest_entry.json",
+            "sha256": "0cabeeff2d1bf44e935a551d854340b959b0405c15ee28c16d29b901dee6f8ef"
+        },
+        {
+            "path": "fixtures/contracts/manifest_header.json",
+            "sha256": "09abbb62f2a9065f56900493768c3c7a8aacdcd68d0102a7a09ac6d32196f40c"
+        },
+        {
+            "path": "fixtures/contracts/occurrence.json",
+            "sha256": "d94a478d6f86968abdd4c70ed0072d92d91955e19d421eb07916f7adbda955dc"
+        },
+        {
+            "path": "fixtures/contracts/plan_entry.json",
+            "sha256": "9bb3c698255a799ad513dfe069d9443f0636615e7d2651fe5f786bdadd50da2e"
+        },
+        {
+            "path": "fixtures/contracts/plan_header.json",
+            "sha256": "f36898de9042c02e12266101340383dc5797df65519248ef9e9b1513dcad5683"
+        },
+        {
+            "path": "fixtures/contracts/policy.json",
+            "sha256": "4c3d02bd17c96d3dd63ef3216a5badeb637097fe3fe3e650faef23a9d17216ee"
+        },
+        {
+            "path": "fixtures/contracts/publication.json",
+            "sha256": "35df93e04db6cd34cb8a692755622e9775c3b39e0ab2be93ae3c227ace571f50"
+        },
+        {
+            "path": "fixtures/contracts/receipt.json",
+            "sha256": "0bc762646dfd811983c52a498c2c1399c492b2bd9f12ec927aa38bcbf6b79ea4"
+        },
+        {
+            "path": "schemas/job.json",
+            "sha256": "e28f5f3cbba004f5010d6c50d2b20282ddac9098b0bf0374e53699d5fc0fec6a"
+        },
+        {
+            "path": "schemas/records.json",
+            "sha256": "bbde6c64a1bbccf6bab790da3ebd9d0b504cc5aa7af8b8fe551354f6eb9b88c7"
+        },
+        {
+            "path": "schemas/request.json",
+            "sha256": "fa0bbaf92d738cd5dad79672cbc606fd4a5d5b59c217c00d3d3b9a049c7221b4"
+        },
+        {
+            "path": "schemas/response.json",
+            "sha256": "5896e8950996e5885fbb73a7e07bf147d424a6ca5bf5d76311800f356c7c4f56"
+        },
+        {
+            "path": "src/archive.rs",
+            "sha256": "f27fcd96b26f116f09587d9fbe874c00d708189d6ba68d23021718d2d1094a40"
+        },
+        {
+            "path": "src/archive_backend.rs",
+            "sha256": "457bcb62355095096fbd6aab92d6a8684a139cce4f5b09e7268bd908d2919a9c"
+        },
+        {
+            "path": "src/archive_disk.rs",
+            "sha256": "b87db2ff2702746bc5fd766708e5b844764c13ba5491c6af167243da5c2116a7"
+        },
+        {
+            "path": "src/archive_manifest.rs",
+            "sha256": "dd4bf4a656b8ef4fa46f713bcd6bd9c19b4e8cdf03be422eea1fb1c0304dd275"
+        },
+        {
+            "path": "src/archive_source.rs",
+            "sha256": "2d40a2db145a1ad604532a8c18e19e80acb3708e10a40c86b8be111da793b02f"
+        },
+        {
+            "path": "src/archive_worker.rs",
+            "sha256": "242e89f31b4d9e86f9dd46b64f63d876bd8ccae98fe73e548896ee6e5ec6774f"
+        },
+        {
+            "path": "src/artifact_store.rs",
+            "sha256": "b988e7599c89b59a7eccbff7a7af55e7615bde2830fcb3fed9cdf76bf9469028"
+        },
+        {
+            "path": "src/bin/relic-worker.rs",
+            "sha256": "fabc78a4a8f37a47354c7fba974d9cf5a6fced6b7914a8f47526c1612bb30bf3"
+        },
+        {
+            "path": "src/bin/relicd.rs",
+            "sha256": "4081cb9afc1ad3884b5f7826c454b0d9e2d47c51917d5185a9568eec62d5e12f"
+        },
+        {
+            "path": "src/config.rs",
+            "sha256": "6b365605caf2befcb841c513c234147d267b74c539eb765587eb8eb28c77f103"
+        },
+        {
+            "path": "src/contracts.rs",
+            "sha256": "baf39a6bd9d27a9c5fc0fc77ce46eeecf880ed877339df330abee130af27b004"
+        },
+        {
+            "path": "src/domain.rs",
+            "sha256": "a9988ac232cada5dee1ce16f71c3d24d6e8c2519b2a67a8c2ee274ae20d7322a"
+        },
+        {
+            "path": "src/embedded_archive.rs",
+            "sha256": "43d1bdc7140691ef37faf80cf45e9776383dafae47ae808fd3dfd3ba197f0c9c"
+        },
+        {
+            "path": "src/encrypted_manifest_sort.rs",
+            "sha256": "ebc86e65bc48be0f415ffd00256558b65638ef728f3fe32b859d0fe288e5d185"
+        },
+        {
+            "path": "src/encrypted_manifest_sort/unix.rs",
+            "sha256": "f7fff1a0ab4942baa460f8c62c828fd1dbec7cc70df6a7fdc45f9b5375e9c8e0"
+        },
+        {
+            "path": "src/encrypted_spool.rs",
+            "sha256": "d124c5a67b8755a6b033f888638af0e9eddb17ebda47f9fb99ba390ce093701a"
+        },
+        {
+            "path": "src/identity.rs",
+            "sha256": "49428b28785e5c0163cda9020f26b7c42c5efb382d4244e98b4f744634b4f496"
+        },
+        {
+            "path": "src/lib.rs",
+            "sha256": "66b906754752cee26964dfa1d04afbc211fc5823509e7b96a209cc4d077cdef0"
+        },
+        {
+            "path": "src/local_endpoint.rs",
+            "sha256": "1fd712b477b305d1b15f4d50582057f2c323c1bd21fb534f3a9a2adca39676a2"
+        },
+        {
+            "path": "src/main.rs",
+            "sha256": "03cbf2f1c7593b3c716a751eccc5920c8a2a6c1204144c8bf05218470446fe6d"
+        },
+        {
+            "path": "src/manifest.rs",
+            "sha256": "2fe1d131d1c8bbcc271cce728b43c857b3e99d6db15b2a28574e097c65747f0d"
+        },
+        {
+            "path": "src/manifest_artifact.rs",
+            "sha256": "38784e55fda661634b45e7440d6b0605d9df163e518802f57af280282d399cd0"
+        },
+        {
+            "path": "src/manifest_spool.rs",
+            "sha256": "77cbab56f7eecc85b4d34cb1f9b7a95b93c375bf6155ad46c5b2540d509630fd"
+        },
+        {
+            "path": "src/native_run_store.rs",
+            "sha256": "1b1aa5e58ae084da36a97efd330442c151da900761793a4e8b2eeb699092c030"
+        },
+        {
+            "path": "src/payload_capture.rs",
+            "sha256": "055abd3c479996acd9aa8f8352c5e07f8d6cd37ed8bcf0405f48028c1922a62e"
+        },
+        {
+            "path": "src/planner.rs",
+            "sha256": "e8aa8436c02a5606081cde78eddc16d191c3695e09832051f011b4906e43a02e"
+        },
+        {
+            "path": "src/resources.rs",
+            "sha256": "1de71a5bf97b95b582f2018cf35fe5dca41ed19206f62d0cba05eab28e4a2a8a"
+        },
+        {
+            "path": "src/restore.rs",
+            "sha256": "d29f0b884a6cdb20545a6cf21c408afbb3b47a33e43aa5bcde740f31737c88a9"
+        },
+        {
+            "path": "src/restore_store.rs",
+            "sha256": "b1fd9f2bfba2536e2ea8d0480d2f1a35d94b0a36e2e3b559aa9b6e7ff09612d0"
+        },
+        {
+            "path": "src/scheduler.rs",
+            "sha256": "7d74dce3a0d135cd180272ff23c8756ef92b9d2dfc8008cebdc7eb2212e998bb"
+        },
+        {
+            "path": "src/service.rs",
+            "sha256": "e1ae7a14853e13810ed6c35dfed5d2aec757dd18c8561988c799cca3cc517dbd"
+        },
+        {
+            "path": "src/source_scan.rs",
+            "sha256": "c452c5dcda9581d6f20325826470447f2c5ee332d3ec2ecd11e0e47b7ba3e234"
+        },
+        {
+            "path": "src/state.rs",
+            "sha256": "fc1d2d5cd817739d236988343910d21e77becf05176096eab5a7c862fef315a0"
+        },
+        {
+            "path": "src/worker_runtime.rs",
+            "sha256": "e588f880bab254a2020ad5de83e96224bdae7d850611a615670788e20c01fcb7"
+        },
+        {
+            "path": "src/worker_sandbox.rs",
+            "sha256": "77945971326b4bf1bc0ff8ca8747450f34d561264e8a5e3b4482362fdb0b1823"
+        },
+        {
+            "path": "tests/archive.rs",
+            "sha256": "8b126dc94f7acfbd8eede755a6271376303f5e42dbc2dc1b018d01d89058eeb4"
+        },
+        {
+            "path": "tests/archive_backend.rs",
+            "sha256": "dd64463a6497531ebe766c376011cb2259ab8f75d059650909c11b572e11c01e"
+        },
+        {
+            "path": "tests/archive_disk.rs",
+            "sha256": "672c87e2d81740e1833b6d8a68ffac328ab81a152ff1389fe744ea5208ecb2e2"
+        },
+        {
+            "path": "tests/archive_manifest.rs",
+            "sha256": "ef04361b25fe50d6bcb83126a68ef0a960223737c6aa3a4b25214f594c4c27fc"
+        },
+        {
+            "path": "tests/archive_source.rs",
+            "sha256": "cb88c6b5467e780054e8a0c9bdbb1068ef85c306d181adde06664391ee51423a"
+        },
+        {
+            "path": "tests/archive_stage_state.rs",
+            "sha256": "c2522c00a4f4f42eeca1944e6f996dd9aa8a74cebe2c82e33adc47ad14d8f45f"
+        },
+        {
+            "path": "tests/archive_worker_protocol.rs",
+            "sha256": "440080cb4fa76ec778a7beae05d2bbbcae1d5db4e13a872efec8dba51a41a36d"
+        },
+        {
+            "path": "tests/artifact_state.rs",
+            "sha256": "1d8d962606b71d32715a3f9b3bc2b0a2a8a4421d1bdacf45ad0d7f8593737230"
+        },
+        {
+            "path": "tests/artifact_store.rs",
+            "sha256": "0038d2212794b61032a568e2b47c33e2b557eea09f7db01daec1584fe04b9fc0"
+        },
+        {
+            "path": "tests/capture_integration.rs",
+            "sha256": "93a316c6d66518ace23739c4205e0139b6b3f240fa468a9f7bb9cb4f5cdaee82"
+        },
+        {
+            "path": "tests/capture_pipeline.rs",
+            "sha256": "0a64b9bb15452f9837bb32258d344621fcee275ce4ceb9530b2a0008cc0cec38"
+        },
+        {
+            "path": "tests/capture_state.rs",
+            "sha256": "d526b195bb8d53f5d9e45e447b7aba0d881a12aad64b07b2e12039416e73d41a"
+        },
+        {
+            "path": "tests/cli.rs",
+            "sha256": "83d42be898d660f35d3343c23ac84ef036734d28051b4db28b383b33e5294937"
+        },
+        {
+            "path": "tests/config.rs",
+            "sha256": "ece024cff94c46e6906b36939855414b7a5dfb2fbc9d205a3fd1d52a93e4eb08"
+        },
+        {
+            "path": "tests/contracts.rs",
+            "sha256": "5ee8b3153575f19db109bb5d9c8fefbde51da65c50cc144d90e542736f5b3c33"
+        },
+        {
+            "path": "tests/domain.rs",
+            "sha256": "5bdbd21bdd45b6260480ed08c64ff673d6b0bae555987fe171f8da0f92ab1212"
+        },
+        {
+            "path": "tests/embedded_archive.rs",
+            "sha256": "c02df3fc75c25f4e1c31d674afe6f5f50a68122a227e135aacc88295193827b4"
+        },
+        {
+            "path": "tests/encrypted_manifest_sort.rs",
+            "sha256": "a8ac5883ec4f74649e634df0b0e0d21d2bc6d03fba3ce59626b0089950ed09fa"
+        },
+        {
+            "path": "tests/encrypted_spool.rs",
+            "sha256": "f6390a309413255b89595d55886f6dfcaf5d90743df5bd4cf4aa0b6ab028d9f3"
+        },
+        {
+            "path": "tests/endpoint_identifiers.rs",
+            "sha256": "d924c628de25f92312741297895fa96e0810b73ebfa0c32fe21befb00798e77b"
+        },
+        {
+            "path": "tests/identity.rs",
+            "sha256": "251fb52035477200d146bd1c025c7ae4eaa7f6271611951db6eaefb166f15b1e"
+        },
+        {
+            "path": "tests/local_endpoint.rs",
+            "sha256": "64ca3dfe4f3bf3b1a671274aecec745514a09a3ba129330117b7e3e3f01df4f0"
+        },
+        {
+            "path": "tests/manifest.rs",
+            "sha256": "3fb0b1a2e975b20dd8682b838bc77f4bf66e9d9cd09eb18fd7b78721c5f951f4"
+        },
+        {
+            "path": "tests/manifest_artifact.rs",
+            "sha256": "bb9b6f17990492b5f8489f0f8879f4e11b46e82d49cf458c55a8e0016a3c5b66"
+        },
+        {
+            "path": "tests/manifest_spool.rs",
+            "sha256": "8c4ec7347ba43dc9bc4a71f5e167734e5ee05caab55e25b60d8970d92f8eff0c"
+        },
+        {
+            "path": "tests/native_run_state.rs",
+            "sha256": "a45e5084df56d1678b6aae9351b7566b2c593fdab5f81b50ae6eb0bf2fabc042"
+        },
+        {
+            "path": "tests/native_run_store.rs",
+            "sha256": "209673f917b9b03dc4a1eac3817497df4360c0653ce620224b8f80492b851f85"
+        },
+        {
+            "path": "tests/payload_capture.rs",
+            "sha256": "3e09d54162313e5e84baaf76bfd5250e7a5aa0bcb58f24d72f37eadbc29ec1d5"
+        },
+        {
+            "path": "tests/payload_state.rs",
+            "sha256": "fc7925249f66c023e2da6f09dd6a1fe2569cb84fc4a4ac43842d963c6ffa66d3"
+        },
+        {
+            "path": "tests/payload_store.rs",
+            "sha256": "47130cdd9ad451e38d0ef7ec48410686d7fb9c48feca8b8257d2012d0a03bf7d"
+        },
+        {
+            "path": "tests/planner.rs",
+            "sha256": "278506227b69a13ba48334a658bc13689900f5bdc82dcfc24e90846290442f8f"
+        },
+        {
+            "path": "tests/resources.rs",
+            "sha256": "3c1d2678bdadb99d9856592a11d5c74511fab83d30d4528331aee6fd412e242f"
+        },
+        {
+            "path": "tests/restore.rs",
+            "sha256": "f57452f4d11a82021ee3ecd0ebc4e0822da9c27c1bb4253b655b38c301c470bf"
+        },
+        {
+            "path": "tests/restore_state.rs",
+            "sha256": "142e68ea4d3d01cefe130b04582df53576dd2d8a70d172da5a1704f228b4e128"
+        },
+        {
+            "path": "tests/restore_store.rs",
+            "sha256": "4e12379ff5453f98e3633fc4fc4485039e7d0cd274f41caa7e64015e2e446eaf"
+        },
+        {
+            "path": "tests/scheduler.rs",
+            "sha256": "7a9111808644f8d43182030918e5cfae59dce06e2b86108eb889123a2aa699ac"
+        },
+        {
+            "path": "tests/service.rs",
+            "sha256": "616582e3197560bbcefbc641853b182121c6b41c4704674c8619f5fd31873818"
+        },
+        {
+            "path": "tests/source_scan.rs",
+            "sha256": "789d7fb762729e8aa293b9fdcef79a826912741c477916ab8b53ee0a612797b8"
+        },
+        {
+            "path": "tests/state.rs",
+            "sha256": "4c08077775f925821b585438ce18f823a545fbbc2517c5de35ca800d34a38564"
+        },
+        {
+            "path": "tests/state_readonly.rs",
+            "sha256": "9705e48c0d7ad772b981fd0e5980966b1dbeb1da680cdb95774901fc3ef12ca7"
+        },
+        {
+            "path": "tests/worker_runtime.rs",
+            "sha256": "11b071cc793c76f413142586976f458bfb381ff88c3ce1d13f250c19c4e8fe21"
+        },
+        {
+            "path": "tools/check.py",
+            "sha256": "5edc92d8e3b6c9da1ce7a0526cdc712c47a30ab7290fb9fb206db36855f70de8"
+        }
+    ],
+    "source_fingerprint": "e44e78930d4e58c7e637bae89984360e085655c60a0552265e181f04514c47d0",
+    "fingerprint_method": "SHA-256 of UTF-8 canonical Python JSON sources list using sorted keys and compact separators",
+    "envelope": {
+        "memory_max_bytes": 1073741824,
+        "memory_high_bytes": 805306368,
+        "swap_max_bytes": 0,
+        "compiler_jobs": 1,
+        "test_threads": 1,
+        "max_agent_workers": 1,
+        "tasks_max": 128,
+        "cpu_quota_percent": 200,
+        "unit_deadline_seconds": 900
+    },
+    "checks": [
+        {
+            "command": "python3 tools/check.py test --locked --all-targets --features embedded-archive -- --include-ignored",
+            "result": "passed",
+            "log": "build/validation/native-run-tests.log",
+            "log_sha256": "a4642a037412dfc63682b71d1c463e6c454529347f47126b46b0abb64a1184d0",
+            "reported_memory_peak": "740.3M",
+            "swap_used_bytes": 0,
+            "tests_passed": 195,
+            "tests_failed": 0,
+            "tests_ignored": 0
+        },
+        {
+            "command": "python3 tools/check.py test --locked --features embedded-archive --test archive_disk contained_worker_verifies_native_snapshot_and_independent_recovery -- --include-ignored",
+            "result": "passed",
+            "log": "build/validation/native-run-recovery.log",
+            "log_sha256": "8f0ae521434ae1c3f8bd1b99bdc054cb2d1c67926ed455c79f62139e14274fc7",
+            "reported_memory_peak": "473.3M",
+            "swap_used_bytes": 0,
+            "tests_passed": 1,
+            "tests_failed": 0,
+            "tests_ignored": 0
+        },
+        {
+            "command": "python3 tools/check.py clippy --locked --all-targets --features embedded-archive -- -D warnings",
+            "result": "passed",
+            "log": "build/validation/native-run-clippy.log",
+            "log_sha256": "8c46ce90385055cbefb12fca003f97b5fc78d7128d3e116a4dfe88d53162e543",
+            "reported_memory_peak": "313.1M",
+            "swap_used_bytes": 0
+        },
+        {
+            "command": "python3 tools/check.py check --locked --all-targets --no-default-features",
+            "result": "passed",
+            "log": "build/validation/native-run-default-check.log",
+            "log_sha256": "4bd75d4dd978de59247ec3022d77ef2542dcbb54082df718a6791d1c6060c9b8",
+            "reported_memory_peak": "235.6M",
+            "swap_used_bytes": 0
+        }
+    ],
+    "native_baseline": {
+        "commit": "9a26dcce6b3d510caf070be27fe0bb8225df4da4",
+        "run_id": 42858335229,
+        "url": "https://github.com/mayazrakib/relic/actions/runs/42858335229",
+        "results": {
+            "linux-x86_64": "success",
+            "windows-x86_64": "success",
+            "macos-arm64": "success"
+        }
+    },
+    "verification_scope": [
+        "195 all-target local tests, zero ignored, serial execution under aggregate1GiB/no swap",
+        "Final targeted native run includes changed-key pre-effect rejection, lost response simulation, source-stage removal, readonly native reconciliation, independent restic check/restore",
+        "Kernel kill-control fault injection proves retained child/cgroup ownership, cross-store parent lock and active resource reservation until bounded reaping",
+        "Schema7 migration and immutable capture/catalogue/key/physical bindings; one creation attempt; three consecutive verification failures maximum",
+        "Readonly native recovery backend rejects all mutation; checked byte quota serialized before write, poison on failure, no refund",
+        "Worker sync rejects changed entries and directory generations and stays inside killable cgroup"
+    ],
+    "limits": [
+        "Private staging only; no final destination authority, fenced admission, receipt, or enabled daemon backup dispatch",
+        "Persistent node-wide disk quotas and cleanup still required; active stage reservations do not account retained disk after completion",
+        "Controller startup delegated-scope quiescence and persistent admission reconstruction remain incomplete",
+        "Process fault fixtures do not prove power-loss durability or arbitrary filesystem-provider acknowledgement semantics",
+        "Linux x86_64 containment only; Windows/macOS native worker implementation and large-index/performance qualification pending",
+        "Existing portable ASCII regular-file/directory profile without original metadata; full source names, snapshots, S3 and all later phases pending"
+    ],
+    "corrective_cycles": [
+        {
+            "failure": "non-exhaustive SDK LsOptions struct literal",
+            "cycles": 1,
+            "correction": "Set public recursive field on default options"
+        },
+        {
+            "failure": "fault-injection write grant rejected non-private fixture root",
+            "cycles": 1,
+            "correction": "Explicitly set disposable fixture root0700 before launching"
+        },
+        {
+            "failure": "Clippy collapsible_if",
+            "cycles": 1,
+            "correction": "Use equivalent chained if-let"
+        }
+    ]
+}

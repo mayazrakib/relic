@@ -1,0 +1,1335 @@
+{
+    "schema_version": 1,
+    "objective": "Implement the approved Relic full-system plan without weakening its acceptance gates",
+    "status": "paused",
+    "baseline": {
+        "git_head": "e9a496080bd67ea6eae4a8c4dff06e8f5568ac3e",
+        "specification_version": "0.1.0-draft.2",
+        "specification_sha256": "0d3404ca7693b8f2cad0f566fdc4a7b6a0ab77791d59b9e3eb8e58632f0ebee2",
+        "original_untracked": [
+            "SPEC.md"
+        ],
+        "host": {
+            "system": "Linux",
+            "architecture": "x86_64"
+        }
+    },
+    "delivery": {
+        "license": "MIT",
+        "implementation_branch": "implementation/relic-full-system",
+        "primary_branch": "master",
+        "native_targets": [
+            "linux-x86_64",
+            "windows-x86_64",
+            "macos-arm64"
+        ],
+        "snapshot_adapters": [
+            "VSS",
+            "APFS",
+            "Btrfs"
+        ],
+        "databases": [
+            "SQLite",
+            "PostgreSQL",
+            "MySQL"
+        ],
+        "imaging": "nonbootable data volumes and partitions on disposable media",
+        "remote_authority": "milestone commits and pushes to implementation branch only",
+        "excluded": [
+            "bare-metal boot recovery",
+            "additional architectures",
+            "additional providers",
+            "external plugin ecosystem",
+            "master merge",
+            "release publication",
+            "deployment"
+        ]
+    },
+    "controls": {
+        "max_corrective_cycles_per_failure": 2,
+        "max_external_retries": 2,
+        "max_optimization_candidates_per_subsystem": 3,
+        "max_workers": 1,
+        "require_new_evidence_before_retry": true,
+        "reopen_only_if_inputs_change": true,
+        "allow_acceptance_waivers": false,
+        "timeouts_seconds": {
+            "unit": 900,
+            "integration": 1800,
+            "native_package": 3600,
+            "performance_trial": 7200,
+            "fuzz_per_target": 3600,
+            "standalone_soak": 86400,
+            "cluster_soak_per_topology": 21600
+        },
+        "host_memory": {
+            "aggregate_bytes": 1073741824,
+            "pressure_threshold_bytes": 805306368,
+            "swap_bytes": 0,
+            "compiler_jobs": 1,
+            "test_threads": 1,
+            "heavy_commands": "serialized",
+            "linux_enforcement": "python3 tools/check.py: fixed relic-validation service with MemoryMax=1G MemoryHigh=768M MemorySwapMax=0 TasksMax=128 CPUQuota=200%",
+            "probe": "Child reported memory.max=1073741824, memory.high=805306368, memory.swap.max=0; direct unguarded inside invocation was rejected",
+            "largest_reported_validation_peak": "770.2M passing lean test build; final combined suite 633M, both zero swap"
+        },
+        "previous_host_memory": {
+            "aggregate_bytes": 2147483648,
+            "swap_bytes": 0,
+            "compiler_jobs": 1,
+            "test_threads": 1,
+            "heavy_commands": "serialized",
+            "linux_enforcement": "systemd-run user transient service with MemoryMax=2G MemorySwapMax=0 TasksMax=128 CPUQuota=200%",
+            "probe": "Read memory.max=2147483648 and memory.swap.max=0 from the actual probe process cgroup; probe exited successfully.",
+            "largest_reported_validation_peak": "2G (enforced aggregate cap, includes file cache; no swap)"
+        }
+    },
+    "tasks": [
+        {
+            "phase": 0,
+            "name": "Baseline and environments",
+            "dependencies": [],
+            "status": "passed",
+            "acceptance": [
+                "Preserve initial source and specification fingerprint",
+                "MIT license and pinned local toolchain",
+                "Native runner inventory and bounded CI authority"
+            ],
+            "attempts": [],
+            "evidence": [
+                "docs/evidence/foundation.json",
+                "LICENSE",
+                ".tool-versions",
+                ".github/workflows/ci.yml"
+            ],
+            "blockers": []
+        },
+        {
+            "phase": 1,
+            "name": "Contracts and feasibility",
+            "dependencies": [
+                0
+            ],
+            "status": "running",
+            "acceptance": [
+                "Executable schemas and all five digest vectors",
+                "Independent encrypted backup/restore on each claimed native target",
+                "Measured archive index/resource and publication boundaries"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 2,
+            "name": "Domain, state, and planning",
+            "dependencies": [
+                1
+            ],
+            "status": "running",
+            "acceptance": [
+                "Typed identities and immutable payload bindings",
+                "Distinct attempt, destination, and occurrence lifecycles",
+                "Durable migration, revision conflicts, intents and receipts"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 3,
+            "name": "Standalone backup and recovery",
+            "dependencies": [
+                1,
+                2
+            ],
+            "status": "running",
+            "acceptance": [
+                "Local and S3 encrypted archive with metadata reports",
+                "Selective and full restore with traversal defenses",
+                "Offline clean-environment independent recovery"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 4,
+            "name": "Daemon, scheduler, and resource control",
+            "dependencies": [
+                2,
+                3
+            ],
+            "status": "running",
+            "acceptance": [
+                "Authenticated local API and CLI",
+                "Restart, DST, retry and cancellation correctness",
+                "Finite memory, descriptors, streams and spool under fan-out"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 5,
+            "name": "Protection, maintenance, and replication",
+            "dependencies": [
+                3,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Per-destination RPO/RTO and verification freshness",
+                "Guarded retention and last-good protection",
+                "Independent-key replica verified without source access"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 6,
+            "name": "Copy, mirror, synchronization, and continuous operation",
+            "dependencies": [
+                2,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Safe ordinary-file copies and guarded mirror deletions",
+                "Conflict-preserving synchronization and tombstone horizon",
+                "Watcher overflow and periodic reconciliation"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 7,
+            "name": "Native source consistency",
+            "dependencies": [
+                2,
+                3,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "VSS, APFS, and Btrfs native view capture",
+                "Helper ownership and crash cleanup",
+                "Exact achieved consistency and metadata-loss reports"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 8,
+            "name": "Peer cluster and fenced execution",
+            "dependencies": [
+                2,
+                3,
+                4
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Authenticated enrollment, QUIC, and consensus membership",
+                "Scoped destination gateway admission and receiver fencing",
+                "One/two/three voter fault and uncertainty acceptance"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 9,
+            "name": "Desktop application",
+            "dependencies": [
+                2,
+                4,
+                5
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Native three-tab tray UI independent of daemon",
+                "Inspect plans, restores, health and per-target outcomes",
+                "Theme, keyboard, screen reader, 200-percent text and resource evidence"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 10,
+            "name": "Database and image adapters",
+            "dependencies": [
+                3,
+                7
+            ],
+            "status": "pending",
+            "acceptance": [
+                "SQLite, PostgreSQL and MySQL usable-state restore",
+                "Nonbootable volume/partition image on disposable media",
+                "Wrong-device and complete recovery-set protection"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 11,
+            "name": "Security, performance, and sustained acceptance",
+            "dependencies": [
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Complete native recovery and adversarial corpus",
+                "Bounded fuzz and standalone/cluster soaks",
+                "Cold/warm resource and incremental-detection performance gates"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        },
+        {
+            "phase": 12,
+            "name": "Native packaging and final qualification",
+            "dependencies": [
+                11
+            ],
+            "status": "pending",
+            "acceptance": [
+                "Three native installer lifecycle and recovery tests",
+                "SBOM, MIT/dependency notices and artifact/source linkage",
+                "All required conformance evidence passes with no waivers"
+            ],
+            "attempts": [],
+            "evidence": [],
+            "blockers": []
+        }
+    ],
+    "evidence": [
+        "docs/evidence/foundation.json",
+        "docs/evidence/embedded_archive.json",
+        "docs/evidence/bounded_primitives.json",
+        "docs/evidence/capture_admission.json",
+        "docs/evidence/low_memory.json",
+        "docs/evidence/pinned_capture.json",
+        "docs/evidence/artifact_store.json",
+        "docs/evidence/payload_capture.json",
+        "docs/evidence/payload_store.json",
+        "docs/evidence/restore_store.json",
+        "docs/evidence/multipass_sort.json",
+        "docs/evidence/native_run_store.json",
+        "docs/evidence/staging_quota.json",
+        "docs/evidence/gateway_journal.json",
+        "docs/evidence/gateway_initialization.json",
+        "docs/evidence/gateway_publication.json",
+        "docs/evidence/native_worker_scopes.json",
+        "docs/evidence/physical_registry.json",
+        "docs/evidence/destination_growth.json"
+    ],
+    "blockers": [],
+    "next_action": "Remain paused. Resume only on explicit user instruction, beginning with full startup/source-view inventory and safe cleanup/credits, record retirement, capacity-domain qualification and stable chunking before all remaining full-system gates.",
+    "current_specification": {
+        "version": "0.1.0-draft.3",
+        "sha256": "8058e8dbdbc25caaea692dcb9e0e7982894a926e4bee48bab062e8b29ed98065"
+    },
+    "source_fingerprint": "91b72a74da1900a0d6d4e3331723449621ab6ff0d50017082d0c756985833fe1",
+    "work_items": [
+        {
+            "name": "MIT baseline and finite goal controls",
+            "status": "passed",
+            "phase": 0,
+            "evidence": [
+                "LICENSE",
+                "docs/implementation_plan.md"
+            ]
+        },
+        {
+            "name": "Extracted schemas and golden vectors",
+            "status": "passed",
+            "phase": 1,
+            "evidence": [
+                "tests/contracts.rs"
+            ]
+        },
+        {
+            "name": "Typed identities and in-memory lifecycle model",
+            "status": "passed",
+            "phase": 2,
+            "evidence": [
+                "tests/identity.rs",
+                "tests/domain.rs"
+            ]
+        },
+        {
+            "name": "Bounded configuration parser and normalization",
+            "status": "passed",
+            "phase": 2,
+            "evidence": [
+                "tests/config.rs"
+            ]
+        },
+        {
+            "name": "Private SQLite, durable intent binding and receipts",
+            "status": "passed",
+            "phase": 2,
+            "evidence": [
+                "tests/state.rs"
+            ]
+        },
+        {
+            "name": "Bounded calendar projection and catch-up logic",
+            "status": "passed",
+            "phase": 4,
+            "evidence": [
+                "tests/scheduler.rs"
+            ]
+        },
+        {
+            "name": "Unix disabled-job management daemon and CLI",
+            "status": "passed",
+            "phase": 4,
+            "evidence": [
+                "tests/service.rs",
+                "tests/cli.rs"
+            ]
+        },
+        {
+            "name": "Tiny Linux encrypted archive and independent restore proof",
+            "status": "passed",
+            "phase": 1,
+            "evidence": [
+                "tests/archive.rs",
+                "docs/archive_feasibility.md"
+            ]
+        },
+        {
+            "name": "Production archive memory/cancellation/publication proof",
+            "status": "pending",
+            "phase": 1,
+            "evidence": []
+        },
+        {
+            "name": "Native Windows management IPC",
+            "status": "pending",
+            "phase": 4,
+            "evidence": []
+        },
+        {
+            "name": "Native CI foundation",
+            "status": "passed",
+            "phase": 0,
+            "evidence": [
+                "docs/native_ci.md",
+                "https://github.com/mayazrakib/relic/actions/runs/42796543305"
+            ],
+            "limits": "Foundation commit 925785e only; external engines excluded; no production profiles or later changes qualified"
+        },
+        {
+            "name": "Embedded rustic_core local archive proof",
+            "status": "passed",
+            "phase": 1,
+            "evidence": [
+                "tests/embedded_archive.rs",
+                "docs/embedded_archive.md"
+            ],
+            "limits": "Small and 1MiB fixture only; no production resource/fencing or broad native profile proof"
+        },
+        {
+            "name": "Streaming logical manifest semantic validation",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/manifest.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Content verification separate; not source snapshot authority"
+        },
+        {
+            "name": "Bounded disposable manifest ordering spool",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/manifest_spool.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Not encrypted or durable publication authority; canonical private parent validation covered"
+        },
+        {
+            "name": "Hierarchical resource reservations and shared buffers",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "tests/resources.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Accounting only; scheduler and adapter callers not integrated"
+        },
+        {
+            "name": "Unix verified regular-file restore and directory traversal",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/restore.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "No metadata/overwrite/engine integration, Windows implementation, or crash cleanup"
+        },
+        {
+            "name": "Best-effort Unix source scanner",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/source_scan.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "No snapshots, links, metadata, device isolation, grants, or resource-pool integration"
+        },
+        {
+            "name": "Independent restic recovery of embedded-produced archive",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "tests/embedded_archive.rs",
+                "docs/evidence/bounded_primitives.json"
+            ],
+            "limits": "Tiny Linux fixture after source removal; no other native independent recovery proof"
+        },
+        {
+            "name": "Resolved-evidence policy preflight",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/planner.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Supplied evidence only; no real resolver, live probing, resource reservation, or execution authority"
+        },
+        {
+            "name": "Durable capture binding and immutable manifest freeze",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/capture_state.rs",
+                "tests/capture_pipeline.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Caller must prove view, selected content, artifact durability and source admission"
+        },
+        {
+            "name": "Authenticated encrypted spool and streaming manifest artifact",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/encrypted_spool.rs",
+                "tests/manifest_artifact.rs",
+                "tests/capture_pipeline.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Internal format; no independent crypto review, production key management, encrypted ordering store, or crash cleanup"
+        },
+        {
+            "name": "Active-job leases retained by stage reservations",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "tests/resources.rs",
+                "tests/capture_pipeline.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Production daemon/adapter integration still pending"
+        },
+        {
+            "name": "Linux regular-inode pinning and device-boundary scan",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/source_scan.rs",
+                "src/source_scan.rs",
+                "docs/evidence/capture_admission.json"
+            ],
+            "limits": "Trusted procfs required; same-device bind mounts, macOS mutable-device isolation and full metadata remain pending"
+        },
+        {
+            "name": "One-GiB guarded development and lean profiles",
+            "phase": 0,
+            "status": "passed",
+            "evidence": [
+                "tools/check.py",
+                "Cargo.toml",
+                "Taskfile.yml",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "Linux development guard; native release memory qualification remains separate"
+        },
+        {
+            "name": "Streaming encrypted spool reader with reusable record buffer",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/encrypted_spool.rs",
+                "tests/encrypted_spool.rs",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "Whole-stream authentication required before publication; crypto review pending"
+        },
+        {
+            "name": "Bounded encrypted manifest runs and streaming merge",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/encrypted_manifest_sort.rs",
+                "tests/encrypted_manifest_sort.rs",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "At most four runs; no large-tree multipass merge or durable crash cleanup"
+        },
+        {
+            "name": "Pinned Unix endpoint identity and capacity evidence",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "src/local_endpoint.rs",
+                "tests/local_endpoint.rs",
+                "docs/evidence/low_memory.json"
+            ],
+            "limits": "Conservative mount ambiguity handling; scanner/policy integration and Windows support pending"
+        },
+        {
+            "name": "Pinned Unix source to encrypted manifest freeze integration",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/capture_integration.rs",
+                "tests/source_scan.rs",
+                "tests/manifest_artifact.rs",
+                "docs/evidence/pinned_capture.json"
+            ],
+            "limits": "Real filesystem fixture only; artifact/key linkage, payload staging, recovery and production publication remain incomplete"
+        },
+        {
+            "name": "Immutable manifest artifact journal and atomic capture link",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/artifact_state.rs",
+                "database/migrations/00003_manifest_artifacts.sql",
+                "docs/evidence/artifact_store.json"
+            ],
+            "limits": "Journal evidence supplied by trusted caller; authenticated verification lives in artifact store"
+        },
+        {
+            "name": "Unix owned artifact staging and authenticated crash reconciliation",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/artifact_store.rs",
+                "tests/capture_integration.rs",
+                "docs/artifact_store.md",
+                "docs/evidence/artifact_store.json"
+            ],
+            "limits": "Simulated process boundaries only; no power-loss, Windows, payload backup, key-provider lifecycle, retention or distributed fencing qualification"
+        },
+        {
+            "name": "Bounded encrypted source payload and exact manifest verification",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/payload_capture.rs",
+                "tests/payload_capture.rs",
+                "docs/payload_capture.md",
+                "docs/evidence/payload_capture.json"
+            ],
+            "limits": "Internal stream and source-deletion fixture; no durable payload journal, key lifecycle, production restore/archive adapter, Windows scanner or independent archive format recovery qualification"
+        },
+        {
+            "name": "Durable payload journal with sealed-manifest prerequisite",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "database/migrations/00004_payload_artifacts.sql",
+                "tests/payload_state.rs",
+                "docs/evidence/payload_store.json"
+            ],
+            "limits": "Low-level evidence supplied by trusted caller; no cryptographic verification in state API"
+        },
+        {
+            "name": "Unix owned payload commit and authenticated crash reconciliation",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/payload_store.rs",
+                "tests/capture_integration.rs",
+                "docs/payload_store.md",
+                "docs/evidence/payload_store.json"
+            ],
+            "limits": "Process boundaries only; no power-loss, Windows, production restore/archive, key-provider or cleanup qualification"
+        },
+        {
+            "name": "Durable restore intents and physical target reservations",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "database/migrations/00005_restore_intents.sql",
+                "tests/restore_state.rs",
+                "docs/evidence/restore_store.json"
+            ],
+            "limits": "Low-level evidence supplied by trusted caller; no filesystem verification in state API"
+        },
+        {
+            "name": "Bounded private rooted-tree restore and verified no-overwrite publication",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "tests/restore_store.rs",
+                "docs/restore_store.md",
+                "docs/evidence/restore_store.json"
+            ],
+            "limits": "Linux process-boundary proof only pending fresh native CI; no Windows, selective restore, original metadata, cleanup or standard-archive adapter qualification"
+        },
+        {
+            "name": "Bounded tiered encrypted manifest compaction",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/encrypted_manifest_sort/unix.rs",
+                "tests/encrypted_manifest_sort.rs",
+                "docs/encrypted_manifest_sort.md",
+                "docs/evidence/multipass_sort.json"
+            ],
+            "limits": "Disposable runs, no durable crash cleanup or Windows ordering;8MiB estimate and fixture rewrite bound are not sustained physical-footprint qualification"
+        },
+        {
+            "name": "Schema-valid opaque endpoint IDs in filesystem stores",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "tests/endpoint_identifiers.rs",
+                "docs/evidence/multipass_sort.json"
+            ],
+            "limits": "Generated artifact/restore filenames retain stricter ID grammar"
+        },
+        {
+            "name": "Pinned archive source omission and publication boundary audit",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "docs/archive_staging_feasibility.md",
+                "docs/evidence/multipass_sort.json"
+            ],
+            "limits": "Static source evidence only; SDK skips errors and cannot establish completeness without independent expected-manifest verification"
+        },
+        {
+            "name": "Restricted encrypted frozen archive ReadSource",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "src/archive_source.rs",
+                "tests/archive_source.rs",
+                "docs/evidence/archive_capture.json"
+            ],
+            "limits": "Restricted portable ASCII files/directories without requested metadata; source ciphertext retained in RAM within8MiB class cap; Durable bounded captured-payload locators and encrypted file staging still pending"
+        },
+        {
+            "name": "Exact staged native snapshot manifest and independent recovery",
+            "phase": 1,
+            "status": "passed",
+            "evidence": [
+                "src/archive_manifest.rs",
+                "tests/archive_manifest.rs",
+                "docs/archive_capture.md",
+                "docs/evidence/archive_capture.json"
+            ],
+            "limits": "Native SDK full index/cache/chunk allocations and blocking calls require isolated-worker resource/cancellation qualification; Private staged snapshot verification does not establish destination mutation authority, fenced serialization, native receipts or durable publication; Comparator runtime fixtures are Unix-only pending Windows encrypted manifest ordering; No production archive/S3 jobs, cleanup, key-provider lifecycle, complete metadata or remaining system acceptance qualification"
+        },
+        {
+            "name": "Durable archive staging and per-file ownership journal",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "database/migrations/00006_archive_stages.sql",
+                "tests/archive_stage_state.rs",
+                "docs/evidence/archive_disk.json"
+            ],
+            "limits": "Trusted state caller supplies verified evidence; no filesystem authentication in low-level state API"
+        },
+        {
+            "name": "Journaled bounded encrypted disk archive source and process reconciliation",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/archive_disk.rs",
+                "tests/archive_disk.rs",
+                "docs/archive_disk.md",
+                "docs/evidence/archive_disk.json"
+            ],
+            "limits": "Private staging only; enabled destination archive jobs remain gated; Portable ASCII directory-rooted file/directory profile without original metadata;256MiB aggregate file ciphertext and1MiB catalogue class; Windows file staging/order unavailable; macOS raced mutable-device open isolation still needs contained worker qualification; Native SDK full index/cache/chunk allocations and blocking calls require isolated worker resource/cancellation containment; Persistent node-wide storage accounting, segmentation beyond class limits, automatic cleanup, key-provider lifecycle and power-loss durability remain unqualified; Destination sole-credential mutation fencing, native durable receipts, S3 and every subsequent full-system acceptance phase remain required"
+        },
+        {
+            "name": "Finite native startup lock contention correction",
+            "phase": 2,
+            "status": "locally_passed_native_pending",
+            "evidence": [
+                "tests/state.rs",
+                "docs/evidence/archive_disk.json"
+            ],
+            "limits": "Fresh Windows native execution required; maximum two corrective cycles"
+        },
+        {
+            "name": "Linux aggregate-contained archive worker and independent recovery",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "src/worker_runtime.rs",
+                "src/worker_sandbox.rs",
+                "src/archive_worker.rs",
+                "tests/worker_runtime.rs",
+                "tests/archive_disk.rs",
+                "docs/evidence/archive_worker.json"
+            ],
+            "limits": "Private offline staging profile; no production daemon backup dispatch or destination publication; Linux x86_64 delegated cgroup2 and Landlock ABI>=3 required; Windows/macOS worker containment pending; Native worker-run pre-effect journal, repository/key ownership, restart reconciliation and uncertain-lease orchestration still pending; Persistent staging quotas, provider durability, cleanup, key-provider lifecycle, large-index and sustained resource qualification remain open; Current source profile remains portable ASCII files/directories without original metadata; complete source segmentation and platform support pending; S3, sole-credential fenced destination mutations, native durable receipts and all remaining full-system phases remain required"
+        },
+        {
+            "name": "Read-only source journal and Linux least-authority endpoint handles",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "src/state.rs",
+                "src/local_endpoint.rs",
+                "tests/state_readonly.rs",
+                "docs/evidence/archive_worker.json"
+            ],
+            "limits": "Live parent writer and existing WAL/SHM required; fresh native matrix pending"
+        },
+        {
+            "name": "Durable private native-run ownership and finite recovery",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "src/native_run_store.rs",
+                "src/archive_worker.rs",
+                "src/archive_backend.rs",
+                "database/migrations/00007_native_runs.sql",
+                "tests/native_run_state.rs",
+                "tests/native_run_store.rs",
+                "docs/evidence/native_run_store.json"
+            ],
+            "limits": "Private staging only; no final destination authority, fenced admission, receipt, or enabled daemon backup dispatch; Persistent node-wide disk quotas and cleanup still required; active stage reservations do not account retained disk after completion; Controller startup delegated-scope quiescence and persistent admission reconstruction remain incomplete; Process fault fixtures do not prove power-loss durability or arbitrary filesystem-provider acknowledgement semantics; Linux x86_64 containment only; Windows/macOS native worker implementation and large-index/performance qualification pending; Existing portable ASCII regular-file/directory profile without original metadata; full source names, snapshots, S3 and all later phases pending"
+        },
+        {
+            "name": "Durable owned staging ciphertext quota and first-use inventory gate",
+            "phase": 4,
+            "status": "passed",
+            "evidence": [
+                "src/staging_quota.rs",
+                "src/state.rs",
+                "database/migrations/00008_staging_quota.sql",
+                "tests/staging_quota_state.rs",
+                "tests/staging_quota_storage.rs",
+                "tests/archive_disk.rs",
+                "docs/evidence/staging_quota.json"
+            ],
+            "limits": "Logical ciphertext only, not allocated filesystem blocks, metadata/inodes, standalone temporary sorter space or plaintext restore trees; One canonical node state database and external-writer exclusion required; multiple independent databases are not a shared quota authority; Registered storage is not rescanned for unknown files introduced later; full controller startup inventory and delegated-scope quiescence remain pending; Legacy inventory APIs trust physical proof supplied by internal caller; native repository bytes and unknown files require actual caller inventory; No quota release or recursive cleanup; safe durable credits and administrator recovery still pending; Unix device/inode identity is not removable-volume identity across remount/device reuse; Private stages only; production enabled jobs, fenced destination publication/receipts, S3 and all other mandatory full-system gates remain incomplete"
+        },
+        {
+            "name": "Standalone publication journal and strict snapshot discovery",
+            "phase": 2,
+            "status": "passed",
+            "evidence": [
+                "src/gateway_state.rs",
+                "src/archive_snapshot.rs",
+                "database/migrations/00009_gateway.sql",
+                "tests/gateway_state.rs",
+                "tests/archive_disk.rs",
+                "docs/evidence/gateway_journal.json"
+            ],
+            "limits": "Journal APIs trust actual physical exclusion, native verification and no-effect proof supplied by internal caller; not exposed as public authorization endpoint; No physical gateway controller, complete final-publication executor, sole-credential boundary or destination receipt durability established by this checkpoint; Exact physical storage identity uniqueness is not complete ancestor/prefix conflict-domain resolution; quorum, maintenance and receiver-failover protections remain pending; Unwired src/gateway_worker.rs is next-step implementation work and is deliberately excluded from this tested source set and milestone commit; Stable authenticated chunker parameters across fresh file-archive stages remain a deduplication qualification gate; SDKinit random polynomial andcopy preservesblobboundaries; Full controller startup, persistent physical inventory, cleanup/credits, selected native worker implementations, S3 and all remaining full-system acceptance gates remain incomplete"
+        },
+        {
+            "name": "Physical local gateway worker and durable controller",
+            "phase": 3,
+            "status": "in_progress",
+            "evidence": [
+                "src/gateway_worker.rs",
+                "src/gateway_store.rs",
+                "src/gateway_layout.rs",
+                "src/worker_identity.rs",
+                "src/worker_runtime.rs",
+                "database/migrations/00010_gateway_layout.sql",
+                "tests/gateway_store.rs",
+                "tests/gateway_layout.rs",
+                "tests/worker_identity.rs",
+                "docs/evidence/gateway_initialization.json",
+                "docs/evidence/gateway_publication.json"
+            ],
+            "limits": "Restricted local native copy/full verification, source-free recovery, strict no-effect proof and receipt controller passed. Canonical cross-resource exclusion, private-run scope protocol, source cleanup pins, destination growth reservations, full native profiles and all remaining system gates remain required. Enabled jobs stay gated."
+        },
+        {
+            "name": "Owned local initialization and recorded kernel quiescence",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/gateway_initialization.json"
+            ],
+            "limits": "Restricted Linux local filesystem initialization profile only; not full standalone archive acceptance or publication safety."
+        },
+        {
+            "name": "Restricted local native publication and recovery",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/gateway_publication.json"
+            ],
+            "limits": "Exclusive local ext4/Btrfs/XFS Linux profile only; canonical cross-resource/all-owned-root conflict registry and per-volume outstanding destination growth reservations remain mandatory before enabled jobs; Private NativeRunStore still needs durable kernel scopes across create and verification; trusted source retention prevents cleanup in this slice, but general durable cleanup pins and credits remain required; Existing registered scratch is not a full startup census; physical allocated blocks, directory metadata/inodes, unknown inventory and administrative recovery remain incomplete; Scope identity assumes unique host machine IDs and trusted controller forbidding cgroup rename/migration; local proof does not establish remote request drain, other-host exclusion, quorum or S3 safety; Frozen native source metadata/path profile, stable target-compatible file-archive chunking, large-index and sustained memory/performance qualification remain incomplete; Standalone S3, native Windows/macOS containment, maintenance/retention/replication qualification, copy/mirror/sync, native snapshots, cluster/UI, databases/imaging and installers remain required; no full phase acceptance or release claimed; Process fault fixtures and fsync calls do not establish power-loss qualification; enabled jobs remain gated"
+        },
+        {
+            "name": "Durable private native worker scopes",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/native_worker_scopes.json"
+            ],
+            "limits": "Exclusive local Linux ext4/Btrfs/XFS profile and trusted controller scope ownership; no remote request draining, other-host exclusion, hardware host attestation or shared-storage fencing; Canonical cross-resource/all-owned-root registry and destination-volume outstanding growth reservations remain mandatory before enabling jobs; Legacy unknown scopes need trusted administrative exclusion proof; this checkpoint does not automatically adopt or delete them; Complete startup physical inventory, durable source cleanup pins and credits, stable chunking, larger source/index resource qualification, complete metadata and native names remain open; Windows/macOS worker containment, S3, maintenance, full replication, copy/mirror/sync, native snapshots, cluster/UI, databases/imaging, security/performance soaks and installers remain required; full goal active and enabled jobs gated; Process fault fixtures and synchronization calls do not establish power-loss qualification"
+        },
+        {
+            "name": "Bounded physical-root admission and file-only worker state grants",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/physical_registry.json"
+            ],
+            "limits": "Exclusive one canonical node database and protected root ancestors with external writer/namespace mutation exclusion; no other-host fencing or remote request drain; Original source-view producer lifecycle, complete physical object census, root retirement, safe cleanup/credits and boot/mount-namespace rebasing remain incomplete; changed evidence fails closed; Per-operation metadata snapshots remain future isolation work; workers currently read node database metadata, and parent must exclude path replacement during file capability setup; Destination growth and shared staging capacity-domain accounting are not implemented; Btrfs subvolume device/statfs identities do not identify a common free-space pool, and generic backing thin-pool independence is unqualified; Real mounted bind/casefold/Btrfs pool/project-quota qualification and power-loss tests are distinct from bounded parsed-observation and process-fault fixtures; Stable archive chunking, complete names/metadata and larger-index qualification, Windows/macOS worker containment, S3, maintenance/replication, copy/mirror/sync, snapshots, cluster/UI, databases/imaging, security/performance soaks and installers remain required; all enabled archive jobs and full system acceptance stay gated"
+        },
+        {
+            "name": "Conservative node-wide destination and staging capacity reservations",
+            "phase": 3,
+            "status": "passed",
+            "evidence": [
+                "docs/evidence/destination_growth.json"
+            ],
+            "limits": "One canonical node authority, protected roots and cooperating bounded writers; arbitrary external filesystem consumption and unverified backing thin pools are not covered; Node-wide bucket deliberately overcounts independent volumes and already-written bytes; partitioned filesystem/project-quota capacity domains and real Btrfs mounted-pool qualification remain open; Trusted raw journal and inventory APIs do not establish physical identity, scope exclusion or coordinator ownership themselves; production wrappers supply those proofs; Blocking parent metadata/statvfs calls are not yet isolated; logical ciphertext/write charges are distinct from complete filesystem block/inode/write-amplification qualification; Complete startup census, source-view lifetime, cleanup/credits, journal record retirement, reboot/namespace rebasing and stable chunking remain incomplete; Other selected platform containment, S3, full replication/maintenance, copy/mirror/sync, snapshots, cluster/UI, databases/imaging, power-loss/security/performance soaks and installers remain required; full goal incomplete and enabled jobs gated"
+        }
+    ],
+    "last_goal_turn": {
+        "classification": "paused_at_requested_milestone",
+        "result": "Committed and pushed c2d2024 capacity reservation milestone. All269 local tests pass zeroignored; feature Clippy, default build, fmt and whitespace pass inside enforced1GiB/high768MiB/swap0. Remote feature SHA/default master verified; master e9a4960 unchanged. Native CI42978584850 queued at pause. README edit and live goal checkpoint remain uncommitted. Full-system goal incomplete; no following milestone started. User requested stopping at this milestone."
+    },
+    "remote_checkpoint": {
+        "commit": "c2d20242bcffe26a07750f3873b3a0eb34cf61bb",
+        "branch": "implementation/relic-full-system",
+        "native_ci_run_id": 42978584850,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42978584850",
+        "status": "queued_at_pause",
+        "push_transport": "existing authorized SSH credential",
+        "remote_sha_verified": true,
+        "primary_branch_preserved": "e9a496080bd67ea6eae4a8c4dff06e8f5568ac3e",
+        "remote_default_head": "master"
+    },
+    "prior_native_checkpoint": {
+        "commit": "36be96cf2e7b05d470ff4d58852a5fad5a9938e3",
+        "branch": "implementation/relic-full-system",
+        "native_ci_run_id": 42912238791,
+        "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42912238791",
+        "status": "completed_successfully",
+        "push_transport": "existing authorized SSH credential",
+        "results": {
+            "linux-x86_64": "success",
+            "windows-x86_64": "success",
+            "macos-arm64": "success"
+        }
+    },
+    "earlier_native_checkpoints": [
+        {
+            "commit": "fac92d9f207fb0deead39e6baaa0a38be6d68c1e",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42794446328,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42794446328",
+            "status": "completed_with_native_failures",
+            "push_transport": "existing authorized SSH credential; HTTPS OAuth credential lacks workflow scope",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "failure: concurrent initialization DatabaseBusy",
+                "macos-arm64": "failure: daemon exited before readiness; SQLite ancestor symlink handling suspected"
+            }
+        },
+        {
+            "commit": "925785e3f0a8a78e49999d15313bc2d77cb9f636",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42796543305,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42796543305",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "4b29fee9703bd8bbad9d645179fc1a5dedbab79c",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42799770445,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42799770445",
+            "status": "completed_with_native_fixture_failure",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "failure: invalid-byte fixture creation EILSEQ before scanner execution"
+            }
+        },
+        {
+            "commit": "4de2f03f85a7366f2f12ce4535d7f5eadf04961a",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42803038693,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42803038693",
+            "status": "completed_with_windows_test_cfg_failure",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "macos-arm64": "success",
+                "windows-x86_64": "failure: Unix cfg attached to shared capture helper"
+            }
+        },
+        {
+            "commit": "fe63bbd983096301a0ae80f16042591faeae4044",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42826545847,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42826545847",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42838374013,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42838374013",
+            "status": "completed_with_windows_initialization_timeout",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "macos-arm64": "success",
+                "windows-x86_64": "failure: five-second initialization lock deadline expired"
+            }
+        },
+        {
+            "commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42842979485,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42842979485",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "9a26dcce6b3d510caf070be27fe0bb8225df4da4",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42858335229,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42858335229",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "1bf9a0ce12b5d83fc8a7d5a6bde0695f20727d19",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42866870779,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42866870779",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "f5a844167109e7ee86cc16e60921c0e598ef069a",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42870030771,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42870030771",
+            "status": "completed_with_macos_fixture_failure",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "failure: strict fixture endpoint resolution saw macOS temporary ancestor alias"
+            }
+        },
+        {
+            "commit": "b9a7a8373913e4df1cf9184aa5341cae179b9bd0",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42876542042,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42876542042",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "3cde2f8fe73edd550945ace4cebf3c8c3fb18804",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42888873544,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42888873544",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        },
+        {
+            "commit": "73454941316d06010886c55a436fd3622c377156",
+            "branch": "implementation/relic-full-system",
+            "native_ci_run_id": 42895779834,
+            "native_ci_url": "https://github.com/mayazrakib/relic/actions/runs/42895779834",
+            "status": "completed_successfully",
+            "push_transport": "existing authorized SSH credential",
+            "results": {
+                "linux-x86_64": "success",
+                "windows-x86_64": "success",
+                "macos-arm64": "success"
+            }
+        }
+    ],
+    "failure_controls": {
+        "macos_invalid_byte_fixture": {
+            "initial_run": 42799770445,
+            "initial_commit": "4b29fee9703bd8bbad9d645179fc1a5dedbab79c",
+            "observed_error": "EILSEQ while creating byte 0xff filename on native test filesystem",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Shared ASCII native fixture plus explicit Linux non-UTF-8 fixture; fresh native execution pending",
+            "corrective_commit": "4de2f03f85a7366f2f12ce4535d7f5eadf04961a",
+            "verification_run": 42803038693,
+            "status": "resolved"
+        },
+        "windows_state_test_cfg": {
+            "initial_run": 42803038693,
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Unconditional capture helper and Unix-only symlink test",
+            "status": "resolved",
+            "corrective_commit": "7a2e98d9aa0389247325ec0ad785e0085a5e5a14",
+            "verification_run": 42806104925
+        },
+        "payload_test_hex_format": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "sha2 0.11 array does not implement LowerHex",
+            "correction": "Use explicit bounded byte-to-hex conversion in fixture",
+            "status": "resolved",
+            "verification": "114-test full suite"
+        },
+        "payload_endpoint_fixture_api": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Fixture used nonexistent LocalEndpoint::open",
+            "correction": "Use actual resolve API with independently observed device/inode identity",
+            "status": "resolved",
+            "verification": "114-test full suite"
+        },
+        "payload_store_cancellation_fixture": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Test setup tried creating a sorter with an already canceled guard",
+            "correction": "Prepare disposable verification sorter before canceling; exercise store cancellation entry directly",
+            "status": "resolved",
+            "verification": "125-test full suite"
+        },
+        "artifact_kind_style_lint": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Clippy upper_case_acronyms conflicts with required uppercase enum style",
+            "correction": "Scoped style lint allowance on ArtifactKind only",
+            "status": "resolved",
+            "verification": "Clippy all-targets warnings denied"
+        },
+        "restore_fixture_generic_rename": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Mechanical naming change missed generic fixture function declaration",
+            "correction": "Rename generic run_with_verifier declaration consistently",
+            "status": "resolved",
+            "verification": "134-test full suite and warnings-denied Clippy"
+        },
+        "windows_initialization_lock_deadline": {
+            "initial_run": 42838374013,
+            "initial_commit": "5828d9052946a0f910ba362e5acb8a3ec41dfe97",
+            "observed_error": "State initialization OS-lock timeout under concurrent Windows native startup",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Named finite30s initialization wait; retain SQLite5s busy timeout and four-worker concurrency fixture; add5.5s held-lock regression",
+            "status": "resolved",
+            "corrective_commit": "d63fcb782d190b5c213ca823800ba53fc05e2dd0",
+            "verification_run": 42842979485
+        },
+        "macos_quota_fixture_ancestor_alias": {
+            "initial_run": 42870030771,
+            "initial_commit": "f5a844167109e7ee86cc16e60921c0e598ef069a",
+            "observed_error": "tests/staging_quota_storage.rs:19 IDENTITY_CHANGED before quota execution; temporary path contains macOS /var ancestor alias",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Canonicalize only the owned test root before strict endpoint resolution; preserve endpoint identity validation",
+            "status": "resolved",
+            "verification_run": 42876542042,
+            "corrective_commit": "b9a7a8373913e4df1cf9184aa5341cae179b9bd0"
+        },
+        "gateway_bind_mount_scope": {
+            "observed_error": "Initializer rejected legitimate /tmp bind mount vs home executable as AMBIGUOUS_SCOPE before launch",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Bounded kernel mount-origin proof preserves hidden bind ancestor overlap checks and permits proven native disjoint origins",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "gateway_worker_protocol_names": {
+            "observed_error": "Protocol fixture rejected initialize because snake_case splits uppercase enum letters",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Use lowercase serialization for uppercase operation members, retaining inspect_initialization underscore",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "gateway_concurrent_scope_reaper": {
+            "observed_error": "Live worker quiescence returned false when its trusted runtime reaper removed original scope concurrently",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Pin original events before kill; require offline original plus absent path on concurrent removal",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "gateway_initialization_clippy": {
+            "observed_error": "Warnings-denied Clippy rejected query tuple complexity, nested if and needless return",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Named execution query row and behavior-preserving local lint normalization",
+            "status": "resolved",
+            "verification": "docs/evidence/gateway_initialization.json"
+        },
+        "native_scope_clippy": {
+            "observed_error": "Warnings-denied Clippy rejected nested scope-quiescence if",
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "correction": "Equivalent let-chain; final full regression and Clippy pass",
+            "status": "resolved",
+            "verification": "docs/evidence/native_worker_scopes.json"
+        },
+        "physical_registry_source_free_recovery": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Global fresh admission reread intentionally removed source roots during existing native and gateway verification",
+            "correction": "Verification validates immutable already-admitted own state/executable/destination scopes and exact retained native staging charge; fresh effects still require full registry admission",
+            "status": "resolved",
+            "verification": "259-test final full suite"
+        },
+        "physical_registry_orphan_scope_fixture": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic orphan fixture bypassed normal executable-root admission before recording running operation",
+            "correction": "Register production recovery executable parent before synthetic start; preserve scope-exclusion assertions",
+            "status": "resolved",
+            "verification": "259-test final full suite"
+        },
+        "physical_registry_clippy_complexity": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Bounded observation helper tuple exceeded type-complexity lint",
+            "correction": "Name the validated ObservationPaths tuple type",
+            "status": "resolved",
+            "verification": "physical-registry-clippy-final.log"
+        },
+        "physical_registry_manual_staging_restore_fixtures": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic native staging and restore prepared-intent fixtures bypassed new physical admission",
+            "correction": "Record actual target/root admission before direct journal preparation; preserve no-worker and no-effect assertions",
+            "status": "resolved",
+            "verification": "259-test final full suite"
+        },
+        "growth_scope_recovery_fixtures": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic old journal rewinds and orphan setup omitted newly coupled growth/scratch obligations",
+            "correction": "Model atomic hold rollback and production-equivalent existing scratch/growth charges",
+            "status": "resolved",
+            "verification": "269-test full run"
+        },
+        "growth_orphan_descriptor_lifetime": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Synthetic orphan marker missing after adding a retained scratch endpoint descriptor to32-FD fixture",
+            "correction": "Drop unneeded scratch endpoint before constrained launch",
+            "status": "resolved",
+            "verification": "Focused orphan plus269-test full run"
+        },
+        "growth_writable_replay_inventory": {
+            "corrective_cycles": 1,
+            "max_corrective_cycles": 2,
+            "observed_error": "Exact charged writable replay initially omitted closed destination inventory gate",
+            "correction": "Both gates checked for replay; bounded recovery cannot create/change an existing scratch charge; no duplicate full-budget readmission",
+            "status": "resolved",
+            "verification": "Closed-gate replay, legacy coverage, concurrency and269-test full run"
+        }
+    },
+    "preserved_worktree_changes": [
+        {
+            "path": "README.md",
+            "description": "Concurrent implementation-branch CI badge edit appeared during this milestone; preserved and excluded from scoped commit."
+        }
+    ],
+    "next_safety_gates": [
+        {
+            "name": "Private native-run recorded scopes",
+            "plan": "Schema12 scope_protocol + operation_token + worker_identity; bind exact running operation before fork; running->unknown revokes late callback; quiesce recorded create/verifier before owner probe. Legacy running/unknown unrecorded scopes fail closed. Token-qualified completion and unknown transitions. Native workers verify current scope before credentials; preserve source-free recovery and existing attempt/failure caps."
+        },
+        {
+            "name": "Canonical conflict domains",
+            "plan": "One node authority registers all owned roots and gateway resource origins before effects; exclude physical aliases, hidden bind prefixes, nested and cross-volume namespace overlap. Exact inode uniqueness alone is insufficient. Revalidate stored roots and serialize admissions; preserve unknown/replacement states."
+        },
+        {
+            "name": "Destination capacity reservations",
+            "plan": "Atomic per-volume outstanding write-growth reservations separate from retained final repository bytes and staging quota; preserve unknown workers and in-flight effects across restart. Do not charge final retained backup bytes as staging."
+        },
+        {
+            "name": "Durable cleanup pins and credits",
+            "plan": "Retain private source and scratch ownership until all accepted publications and old worker scopes resolve; safe physical inventory and no recursive unknown cleanup. Success sorter empty-directory cleanup needs pinned ownership and exclusion; no premature staging credits."
+        },
+        {
+            "name": "Stable file-archive chunking",
+            "plan": "Gateway authenticates target chunker parameters; initialize fresh private stage with compatible config, distinct repository ID and independent credentials. init_with_config lacks existing-config protection, so strict empty/exclusive stage intent is mandatory. Persist config evidence; bounded high-entropy unchanged/sparse-edit fixture measures data blob reuse. Committed-snapshot replication keeps separate exact-source provenance."
+        }
+    ],
+    "stop_request": {
+        "target": "Next tested, committed and pushed durable capacity reservation milestone",
+        "action": "Pause the full goal after this milestone; do not start the following milestone",
+        "status": "fulfilled",
+        "completed_milestone_commit": "c2d20242bcffe26a07750f3873b3a0eb34cf61bb"
+    }
+}

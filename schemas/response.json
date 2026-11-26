@@ -1,0 +1,1419 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:relic:schema:core-response:1",
+    "oneOf": [
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "result": {
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "node_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "ready": {
+                                    "type": "boolean"
+                                },
+                                "quorum": {
+                                    "enum": [
+                                        "available",
+                                        "unavailable",
+                                        "not_applicable"
+                                    ]
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "protection": {
+                                    "type": "object",
+                                    "properties": {
+                                        "state": {
+                                            "enum": [
+                                                "healthy",
+                                                "at_risk",
+                                                "breached",
+                                                "unprotected",
+                                                "unknown",
+                                                "unconfigured"
+                                            ]
+                                        },
+                                        "unknown_count": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "breached_count": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "at_risk_count": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "unprotected_count": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        }
+                                    },
+                                    "required": [
+                                        "state",
+                                        "breached_count",
+                                        "unknown_count",
+                                        "at_risk_count",
+                                        "unprotected_count"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "node_id",
+                                "ready",
+                                "quorum",
+                                "correlation_id",
+                                "protection"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "valid": {
+                                    "type": "boolean"
+                                },
+                                "errors": {
+                                    "type": "array",
+                                    "maxItems": 100,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "path": {
+                                                "type": "string",
+                                                "maxLength": 4096
+                                            },
+                                            "code": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            }
+                                        },
+                                        "required": [
+                                            "path",
+                                            "code"
+                                        ],
+                                        "additionalProperties": false
+                                    }
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "valid",
+                                "errors",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "job_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "revision": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2147483647
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "job_id",
+                                "revision",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "occurrence_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "accepted": {
+                                    "type": "boolean"
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "occurrence_id",
+                                "accepted",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "run_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "occurrence_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "capture_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "target_scope": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "maxItems": 128,
+                                    "uniqueItems": true,
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                    }
+                                },
+                                "occurrence_state": {
+                                    "enum": [
+                                        "pending",
+                                        "ready",
+                                        "active",
+                                        "retry_wait",
+                                        "recovering",
+                                        "completed",
+                                        "partially_completed",
+                                        "failed",
+                                        "canceled"
+                                    ]
+                                },
+                                "state": {
+                                    "enum": [
+                                        "preparing",
+                                        "transferring",
+                                        "verifying",
+                                        "committing",
+                                        "waiting",
+                                        "paused",
+                                        "recovering",
+                                        "completed",
+                                        "partially_completed",
+                                        "failed",
+                                        "canceled"
+                                    ]
+                                },
+                                "destinations": {
+                                    "type": "array",
+                                    "maxItems": 128,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "destination_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "state": {
+                                                "enum": [
+                                                    "pending",
+                                                    "preparing",
+                                                    "transferring",
+                                                    "verifying",
+                                                    "committing",
+                                                    "post_verifying",
+                                                    "waiting",
+                                                    "paused",
+                                                    "recovering",
+                                                    "completed",
+                                                    "failed",
+                                                    "canceled"
+                                                ]
+                                            },
+                                            "error_code": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "receipt_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "native_result_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "verification": {
+                                                "enum": [
+                                                    "metadata_verified",
+                                                    "data_verified",
+                                                    "restore_tested"
+                                                ]
+                                            },
+                                            "achieved_consistency": {
+                                                "enum": [
+                                                    "application_consistent",
+                                                    "crash_consistent",
+                                                    "best_effort"
+                                                ]
+                                            }
+                                        },
+                                        "required": [
+                                            "destination_id",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false
+                                    }
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "run_id",
+                                "occurrence_id",
+                                "capture_id",
+                                "target_scope",
+                                "occurrence_state",
+                                "state",
+                                "destinations",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "items": {
+                                    "type": "array",
+                                    "maxItems": 1000,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "kind": {
+                                                "enum": [
+                                                    "job",
+                                                    "run",
+                                                    "repository",
+                                                    "snapshot",
+                                                    "event",
+                                                    "node",
+                                                    "protection",
+                                                    "plan_entry"
+                                                ]
+                                            },
+                                            "id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "state": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 64
+                                            },
+                                            "time": {
+                                                "type": "string",
+                                                "format": "date-time",
+                                                "pattern": "Z$",
+                                                "maxLength": 40
+                                            },
+                                            "repository_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "job_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "destination_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "capture_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "receipt_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "error_code": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "name": {
+                                                "type": "string",
+                                                "maxLength": 256
+                                            },
+                                            "severity": {
+                                                "enum": [
+                                                    "debug",
+                                                    "info",
+                                                    "success",
+                                                    "warning",
+                                                    "error",
+                                                    "critical"
+                                                ]
+                                            },
+                                            "read": {
+                                                "type": "boolean"
+                                            },
+                                            "protection_state": {
+                                                "enum": [
+                                                    "healthy",
+                                                    "at_risk",
+                                                    "breached",
+                                                    "unprotected",
+                                                    "unknown",
+                                                    "unconfigured"
+                                                ]
+                                            },
+                                            "last_capture_at": {
+                                                "type": "string",
+                                                "format": "date-time",
+                                                "pattern": "Z$",
+                                                "maxLength": 40
+                                            },
+                                            "last_verified_at": {
+                                                "type": "string",
+                                                "format": "date-time",
+                                                "pattern": "Z$",
+                                                "maxLength": 40
+                                            },
+                                            "replication_lag_seconds": {
+                                                "type": "string",
+                                                "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                            },
+                                            "rto_seconds": {
+                                                "type": "string",
+                                                "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                            },
+                                            "destination_unavailable": {
+                                                "type": "boolean"
+                                            },
+                                            "metrics": {
+                                                "type": "array",
+                                                "minItems": 4,
+                                                "maxItems": 4,
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "metric": {
+                                                            "enum": [
+                                                                "rpo",
+                                                                "rto",
+                                                                "verification_age",
+                                                                "replication_lag"
+                                                            ]
+                                                        },
+                                                        "state": {
+                                                            "enum": [
+                                                                "healthy",
+                                                                "at_risk",
+                                                                "breached",
+                                                                "unprotected",
+                                                                "unknown",
+                                                                "unconfigured"
+                                                            ]
+                                                        },
+                                                        "objective_seconds": {
+                                                            "type": "string",
+                                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                                        },
+                                                        "observed_seconds": {
+                                                            "type": "string",
+                                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                                        },
+                                                        "measured_at": {
+                                                            "type": "string",
+                                                            "format": "date-time",
+                                                            "pattern": "Z$",
+                                                            "maxLength": 40
+                                                        },
+                                                        "evidence_id": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "maxLength": 128,
+                                                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                                        },
+                                                        "reason": {
+                                                            "type": "string",
+                                                            "maxLength": 1024
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "metric",
+                                                        "state"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
+                                            },
+                                            "snapshot_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "plan_id": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "entry_index": {
+                                                "type": "string",
+                                                "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                            },
+                                            "action": {
+                                                "enum": [
+                                                    "restore",
+                                                    "delete",
+                                                    "replace",
+                                                    "skip",
+                                                    "rename",
+                                                    "retain",
+                                                    "quarantine",
+                                                    "prune"
+                                                ]
+                                            },
+                                            "source_path": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "encoding": {
+                                                        "enum": [
+                                                            "unix_bytes",
+                                                            "windows_utf16le"
+                                                        ]
+                                                    },
+                                                    "components": {
+                                                        "type": "array",
+                                                        "maxItems": 1024,
+                                                        "items": {
+                                                            "type": "string",
+                                                            "pattern": "^[A-Za-z0-9_-]*$",
+                                                            "maxLength": 131072
+                                                        }
+                                                    }
+                                                },
+                                                "required": [
+                                                    "encoding",
+                                                    "components"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "destination_path": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "encoding": {
+                                                        "enum": [
+                                                            "unix_bytes",
+                                                            "windows_utf16le"
+                                                        ]
+                                                    },
+                                                    "components": {
+                                                        "type": "array",
+                                                        "maxItems": 1024,
+                                                        "items": {
+                                                            "type": "string",
+                                                            "pattern": "^[A-Za-z0-9_-]*$",
+                                                            "maxLength": 131072
+                                                        }
+                                                    }
+                                                },
+                                                "required": [
+                                                    "encoding",
+                                                    "components"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "expected_generation": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "content_digest": {
+                                                "type": "string",
+                                                "pattern": "^sha256:[0-9a-f]{64}$"
+                                            },
+                                            "reason_code": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            }
+                                        },
+                                        "required": [
+                                            "kind",
+                                            "id"
+                                        ],
+                                        "additionalProperties": false,
+                                        "allOf": [
+                                            {
+                                                "if": {
+                                                    "properties": {
+                                                        "kind": {
+                                                            "const": "protection"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ]
+                                                },
+                                                "then": {
+                                                    "required": [
+                                                        "job_id",
+                                                        "destination_id",
+                                                        "protection_state",
+                                                        "destination_unavailable",
+                                                        "metrics"
+                                                    ]
+                                                }
+                                            },
+                                            {
+                                                "if": {
+                                                    "properties": {
+                                                        "kind": {
+                                                            "const": "plan_entry"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ]
+                                                },
+                                                "then": {
+                                                    "required": [
+                                                        "plan_id",
+                                                        "entry_index",
+                                                        "action"
+                                                    ],
+                                                    "anyOf": [
+                                                        {
+                                                            "required": [
+                                                                "source_path"
+                                                            ]
+                                                        },
+                                                        {
+                                                            "required": [
+                                                                "destination_path"
+                                                            ]
+                                                        },
+                                                        {
+                                                            "required": [
+                                                                "repository_id",
+                                                                "snapshot_id"
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        ]
+                                    }
+                                },
+                                "next_cursor": {
+                                    "oneOf": [
+                                        {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 128,
+                                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "items",
+                                "next_cursor",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "operation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "state": {
+                                    "enum": [
+                                        "accepted",
+                                        "completed",
+                                        "failed"
+                                    ]
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "operation_id",
+                                "state",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "kind": {
+                                    "enum": [
+                                        "job",
+                                        "restore",
+                                        "destination",
+                                        "health",
+                                        "capabilities",
+                                        "settings",
+                                        "plan"
+                                    ]
+                                },
+                                "state": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 64
+                                },
+                                "revision": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2147483647
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "id",
+                                "kind",
+                                "state",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "job": {
+                                    "$ref": "urn:relic:schema:job:1"
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "job",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "revision": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2147483647
+                                },
+                                "theme": {
+                                    "enum": [
+                                        "system",
+                                        "light",
+                                        "dark"
+                                    ]
+                                },
+                                "os_notifications": {
+                                    "type": "boolean"
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "revision",
+                                "theme",
+                                "os_notifications",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "plan_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "revision": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2147483647
+                                },
+                                "kind": {
+                                    "enum": [
+                                        "prune",
+                                        "mirror",
+                                        "restore"
+                                    ]
+                                },
+                                "digest": {
+                                    "type": "string",
+                                    "pattern": "^sha256:[0-9a-f]{64}$"
+                                },
+                                "job_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "endpoint_ids": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "maxItems": 128,
+                                    "uniqueItems": true,
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                    }
+                                },
+                                "source_view_ids": {
+                                    "type": "array",
+                                    "maxItems": 128,
+                                    "uniqueItems": true,
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128,
+                                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                    }
+                                },
+                                "expected_generation": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "generated_at": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "Z$",
+                                    "maxLength": 40
+                                },
+                                "expires_at": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "Z$",
+                                    "maxLength": 40
+                                },
+                                "counts": {
+                                    "type": "object",
+                                    "properties": {
+                                        "total": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "delete": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "restore": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "replace": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "skip": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "rename": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "retain": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "quarantine": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "prune": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        }
+                                    },
+                                    "required": [
+                                        "total",
+                                        "delete",
+                                        "restore",
+                                        "replace",
+                                        "skip",
+                                        "rename",
+                                        "retain",
+                                        "quarantine",
+                                        "prune"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "losses": {
+                                    "type": "array",
+                                    "maxItems": 128,
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 1024
+                                    }
+                                },
+                                "capabilities": {
+                                    "type": "array",
+                                    "maxItems": 128,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128,
+                                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                            },
+                                            "supported": {
+                                                "type": "boolean"
+                                            },
+                                            "detail": {
+                                                "type": "string",
+                                                "maxLength": 1024
+                                            }
+                                        },
+                                        "required": [
+                                            "name",
+                                            "supported"
+                                        ],
+                                        "additionalProperties": false
+                                    }
+                                },
+                                "uncertainties": {
+                                    "type": "array",
+                                    "maxItems": 128,
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 1024
+                                    }
+                                },
+                                "entry_cursor": {
+                                    "oneOf": [
+                                        {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 128,
+                                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "plan_id",
+                                "revision",
+                                "kind",
+                                "digest",
+                                "endpoint_ids",
+                                "source_view_ids",
+                                "expected_generation",
+                                "generated_at",
+                                "expires_at",
+                                "counts",
+                                "losses",
+                                "capabilities",
+                                "uncertainties",
+                                "entry_cursor",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "schema_version": {
+                                    "const": 1
+                                },
+                                "operation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "kind": {
+                                    "enum": [
+                                        "plan",
+                                        "verify",
+                                        "mutation",
+                                        "restore"
+                                    ]
+                                },
+                                "state": {
+                                    "enum": [
+                                        "pending",
+                                        "running",
+                                        "completed",
+                                        "failed",
+                                        "canceled"
+                                    ]
+                                },
+                                "plan_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "result_plan_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "error_code": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "verification_coverage": {
+                                    "type": "object",
+                                    "properties": {
+                                        "checked_bytes": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "total_bytes": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "sampled": {
+                                            "type": "boolean"
+                                        },
+                                        "verification_level": {
+                                            "enum": [
+                                                "metadata_verified",
+                                                "data_verified",
+                                                "restore_tested"
+                                            ]
+                                        },
+                                        "observed_at": {
+                                            "type": "string",
+                                            "format": "date-time",
+                                            "pattern": "Z$",
+                                            "maxLength": 40
+                                        },
+                                        "failures": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        }
+                                    },
+                                    "required": [
+                                        "checked_bytes",
+                                        "total_bytes",
+                                        "sampled",
+                                        "verification_level",
+                                        "observed_at",
+                                        "failures"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "restore_counts": {
+                                    "type": "object",
+                                    "properties": {
+                                        "restored": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "skipped": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "renamed": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "conflicts": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        },
+                                        "failed": {
+                                            "type": "string",
+                                            "pattern": "^(0|[1-9][0-9]{0,19})$"
+                                        }
+                                    },
+                                    "required": [
+                                        "restored",
+                                        "skipped",
+                                        "renamed",
+                                        "conflicts",
+                                        "failed"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "schema_version",
+                                "operation_id",
+                                "kind",
+                                "state",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false,
+                            "allOf": [
+                                {
+                                    "if": {
+                                        "properties": {
+                                            "state": {
+                                                "enum": [
+                                                    "pending",
+                                                    "running"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "then": {
+                                        "not": {
+                                            "anyOf": [
+                                                {
+                                                    "required": [
+                                                        "plan_id"
+                                                    ]
+                                                },
+                                                {
+                                                    "required": [
+                                                        "result_plan_id"
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "if": {
+                                        "properties": {
+                                            "state": {
+                                                "const": "completed"
+                                            },
+                                            "kind": {
+                                                "const": "plan"
+                                            }
+                                        }
+                                    },
+                                    "then": {
+                                        "required": [
+                                            "plan_id"
+                                        ]
+                                    }
+                                },
+                                {
+                                    "if": {
+                                        "properties": {
+                                            "state": {
+                                                "const": "failed"
+                                            }
+                                        }
+                                    },
+                                    "then": {
+                                        "required": [
+                                            "error_code"
+                                        ]
+                                    }
+                                },
+                                {
+                                    "if": {
+                                        "properties": {
+                                            "state": {
+                                                "const": "completed"
+                                            },
+                                            "kind": {
+                                                "const": "verify"
+                                            }
+                                        }
+                                    },
+                                    "then": {
+                                        "required": [
+                                            "verification_coverage"
+                                        ]
+                                    }
+                                },
+                                {
+                                    "if": {
+                                        "properties": {
+                                            "state": {
+                                                "const": "completed"
+                                            },
+                                            "kind": {
+                                                "const": "restore"
+                                            }
+                                        }
+                                    },
+                                    "then": {
+                                        "required": [
+                                            "restore_counts"
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "result"
+            ],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "jsonrpc": {
+                    "const": "2.0"
+                },
+                "id": {
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "error": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "integer",
+                            "minimum": -32768,
+                            "maximum": 2147483647
+                        },
+                        "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                        },
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "code": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "retryable": {
+                                    "type": "boolean"
+                                },
+                                "phase": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "correlation_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                },
+                                "destination_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                                }
+                            },
+                            "required": [
+                                "code",
+                                "retryable",
+                                "phase",
+                                "correlation_id"
+                            ],
+                            "additionalProperties": false
+                        }
+                    },
+                    "required": [
+                        "code",
+                        "message"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "jsonrpc",
+                "id",
+                "error"
+            ],
+            "additionalProperties": false
+        }
+    ]
+}

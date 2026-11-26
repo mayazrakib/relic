@@ -1,0 +1,8 @@
+{
+    "fold_ordinal": 0,
+    "intended_utc_instant": "2026-11-10T00:00:00.000000000Z",
+    "job_id": "job_1",
+    "schedule_revision": "1",
+    "trigger_id": "hourly",
+    "intended_local_time": "2026-11-10T11:00:00.000000000"
+}

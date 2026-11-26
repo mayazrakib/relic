@@ -1,0 +1,29 @@
+{
+    "schema_version": 1,
+    "plan_id": "plan_1",
+    "revision": 1,
+    "kind": "mirror",
+    "endpoint_ids": [
+        "target_1"
+    ],
+    "source_view_ids": [
+        "view_1"
+    ],
+    "expected_generation": "generation_1",
+    "generated_at": "2026-11-10T00:00:00Z",
+    "expires_at": "2026-11-10T00:15:00Z",
+    "counts": {
+        "total": "1",
+        "delete": "1",
+        "restore": "0",
+        "replace": "0",
+        "skip": "0",
+        "rename": "0",
+        "retain": "0",
+        "quarantine": "0",
+        "prune": "0"
+    },
+    "losses": [],
+    "capabilities": [],
+    "uncertainties": []
+}

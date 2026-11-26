@@ -1,0 +1,687 @@
+{
+    "type": "object",
+    "properties": {
+        "schema_version": {
+            "const": 1
+        },
+        "job_id": {
+            "$ref": "#/$defs/id"
+        },
+        "revision": {
+            "$ref": "#/$defs/revision"
+        },
+        "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+        },
+        "description": {
+            "type": "string",
+            "maxLength": 4096
+        },
+        "enabled": {
+            "type": "boolean",
+            "default": false
+        },
+        "scope": {
+            "enum": [
+                "local",
+                "cluster"
+            ]
+        },
+        "owner_node": {
+            "$ref": "#/$defs/id"
+        },
+        "candidate_nodes": {
+            "type": "array",
+            "maxItems": 1024,
+            "uniqueItems": true,
+            "items": {
+                "$ref": "#/$defs/id"
+            }
+        },
+        "method": {
+            "enum": [
+                "archive",
+                "copy",
+                "mirror",
+                "sync",
+                "database",
+                "image",
+                "replicate"
+            ]
+        },
+        "mode": {
+            "enum": [
+                "incremental",
+                "full",
+                "differential"
+            ]
+        },
+        "sources": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+                "$ref": "#/$defs/source"
+            }
+        },
+        "destinations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+                "$ref": "#/$defs/destination"
+            }
+        },
+        "consistency": {
+            "type": "object",
+            "properties": {
+                "policy": {
+                    "enum": [
+                        "require_application_consistent",
+                        "require_snapshot",
+                        "prefer_snapshot",
+                        "best_effort"
+                    ]
+                }
+            },
+            "required": [
+                "policy"
+            ],
+            "additionalProperties": false
+        },
+        "schedule": {
+            "$ref": "#/$defs/schedule"
+        },
+        "resources": {
+            "$ref": "#/$defs/resources"
+        },
+        "retry": {
+            "$ref": "#/$defs/retry"
+        },
+        "overlap": {
+            "enum": [
+                "forbid",
+                "queue_one",
+                "bounded_queue",
+                "parallel"
+            ]
+        },
+        "retention": {
+            "$ref": "#/$defs/retention"
+        },
+        "verification": {
+            "$ref": "#/$defs/verification"
+        },
+        "recovery_objectives": {
+            "$ref": "#/$defs/objectives"
+        },
+        "security": {
+            "type": "object",
+            "properties": {
+                "credential_ref": {
+                    "$ref": "#/$defs/id"
+                },
+                "policy_revision": {
+                    "$ref": "#/$defs/revision"
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "tags": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+            }
+        },
+        "created_at": {
+            "$ref": "#/$defs/time"
+        },
+        "updated_at": {
+            "$ref": "#/$defs/time"
+        }
+    },
+    "required": [
+        "schema_version",
+        "job_id",
+        "revision",
+        "name",
+        "scope",
+        "method",
+        "sources",
+        "destinations"
+    ],
+    "additionalProperties": false,
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:relic:schema:job:1",
+    "$defs": {
+        "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+        },
+        "time": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "Z$",
+            "maxLength": 40
+        },
+        "objectives": {
+            "type": "object",
+            "properties": {
+                "rpo_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "rto_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "max_verification_age_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "max_replication_lag_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "protection_level": {
+                    "enum": [
+                        "committed",
+                        "data_verified",
+                        "restore_tested"
+                    ],
+                    "default": "committed"
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "source": {
+            "type": "object",
+            "properties": {
+                "source_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "endpoint": {
+                    "$ref": "#/$defs/id"
+                },
+                "selector": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "default": "."
+                },
+                "exclusions": {
+                    "type": "array",
+                    "maxItems": 1024,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                    }
+                },
+                "snapshot_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "snapshot_selector": {
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "kind": {
+                                    "const": "exact"
+                                },
+                                "snapshot_id": {
+                                    "$ref": "#/$defs/id"
+                                }
+                            },
+                            "required": [
+                                "kind",
+                                "snapshot_id"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "kind": {
+                                    "const": "latest"
+                                }
+                            },
+                            "required": [
+                                "kind"
+                            ],
+                            "additionalProperties": false
+                        }
+                    ]
+                },
+                "repository_id": {
+                    "$ref": "#/$defs/id"
+                }
+            },
+            "required": [
+                "source_id",
+                "endpoint"
+            ],
+            "additionalProperties": false
+        },
+        "destination": {
+            "type": "object",
+            "properties": {
+                "destination_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "endpoint": {
+                    "$ref": "#/$defs/id"
+                },
+                "repository_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "recovery_objectives": {
+                    "$ref": "#/$defs/objectives"
+                }
+            },
+            "required": [
+                "destination_id",
+                "endpoint"
+            ],
+            "additionalProperties": false
+        },
+        "schedule": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "enum": [
+                        "manual",
+                        "calendar",
+                        "startup",
+                        "event",
+                        "peer",
+                        "endpoint"
+                    ]
+                },
+                "trigger_id": {
+                    "$ref": "#/$defs/id"
+                },
+                "revision": {
+                    "$ref": "#/$defs/revision"
+                },
+                "cron": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                },
+                "timezone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                },
+                "missed": {
+                    "enum": [
+                        "skip",
+                        "run_latest",
+                        "run_all_bounded",
+                        "next_regular"
+                    ],
+                    "default": "run_latest"
+                },
+                "gap": {
+                    "enum": [
+                        "skip",
+                        "shift_forward"
+                    ],
+                    "default": "shift_forward"
+                },
+                "fold": {
+                    "enum": [
+                        "first",
+                        "second",
+                        "both"
+                    ],
+                    "default": "first"
+                },
+                "max_age_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "max_occurrences": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                }
+            },
+            "required": [
+                "kind"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "kind": {
+                                "const": "calendar"
+                            }
+                        },
+                        "required": [
+                            "kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "cron",
+                            "timezone"
+                        ]
+                    }
+                }
+            ]
+        },
+        "resources": {
+            "type": "object",
+            "properties": {
+                "class": {
+                    "enum": [
+                        "low",
+                        "balanced",
+                        "throughput"
+                    ]
+                },
+                "memory_bytes": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "cache_bytes": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "spool_bytes": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "workers": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "active_jobs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "endpoint_streams": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "open_files": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "network_bytes_per_second": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,19})$"
+                },
+                "cpu_percent": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+                {
+                    "required": [
+                        "class"
+                    ]
+                },
+                {
+                    "required": [
+                        "memory_bytes"
+                    ]
+                },
+                {
+                    "required": [
+                        "cache_bytes"
+                    ]
+                },
+                {
+                    "required": [
+                        "spool_bytes"
+                    ]
+                },
+                {
+                    "required": [
+                        "workers"
+                    ]
+                },
+                {
+                    "required": [
+                        "active_jobs"
+                    ]
+                },
+                {
+                    "required": [
+                        "endpoint_streams"
+                    ]
+                },
+                {
+                    "required": [
+                        "open_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "network_bytes_per_second"
+                    ]
+                },
+                {
+                    "required": [
+                        "cpu_percent"
+                    ]
+                }
+            ]
+        },
+        "retry": {
+            "type": "object",
+            "properties": {
+                "initial_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "max_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "max_attempts": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "max_age_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "retention": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "keep_last": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "max_age_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "daily": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "weekly": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "monthly": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "yearly": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "protect_last": {
+                    "type": "boolean",
+                    "default": true
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "verification": {
+            "type": "object",
+            "properties": {
+                "publication": {
+                    "enum": [
+                        "metadata_verified",
+                        "data_verified"
+                    ],
+                    "default": "metadata_verified"
+                },
+                "restore": {
+                    "const": "data_verified",
+                    "default": "data_verified"
+                },
+                "scrub_interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                },
+                "sample_percent": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        }
+    },
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "method": {
+                        "const": "replicate"
+                    }
+                },
+                "required": [
+                    "method"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "sources": {
+                        "minItems": 1,
+                        "maxItems": 1,
+                        "items": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/$defs/source"
+                                },
+                                {
+                                    "required": [
+                                        "repository_id"
+                                    ],
+                                    "oneOf": [
+                                        {
+                                            "required": [
+                                                "snapshot_id"
+                                            ]
+                                        },
+                                        {
+                                            "required": [
+                                                "snapshot_selector"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    "destinations": {
+                        "items": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/$defs/destination"
+                                },
+                                {
+                                    "required": [
+                                        "repository_id"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "method": {
+                        "const": "archive"
+                    }
+                },
+                "required": [
+                    "method"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "mode": {
+                        "enum": [
+                            "incremental",
+                            "full",
+                            "differential"
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+}
